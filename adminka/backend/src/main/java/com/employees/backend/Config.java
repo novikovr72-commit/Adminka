@@ -56,7 +56,7 @@ public class Config implements WebMvcConfigurer {
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
         Path absoluteLogsPath = Path.of(logsDir).toAbsolutePath().normalize();
         registry
-            .addResourceHandler("/api/import-logs/**")
+            .addResourceHandler("/api/admin/import-logs/**", "/api/import-logs/**")
             .addResourceLocations("file:" + absoluteLogsPath + "/");
     }
 
@@ -74,13 +74,18 @@ public class Config implements WebMvcConfigurer {
 @RestController
 class AliasController {
 
-    @GetMapping("/api/openapi")
+    @GetMapping({"/api/admin/openapi", "/api/openapi"})
     public void openapiAlias(HttpServletRequest request, HttpServletResponse response) throws Exception {
-        request.getRequestDispatcher("/api/openapi.json").forward(request, response);
+        request.getRequestDispatcher("/api/admin/openapi.json").forward(request, response);
     }
 
-    @GetMapping("/swagger")
+    @GetMapping("/api/openapi.json")
+    public void openapiJsonAlias(HttpServletRequest request, HttpServletResponse response) throws Exception {
+        request.getRequestDispatcher("/api/admin/openapi.json").forward(request, response);
+    }
+
+    @GetMapping({"/swagger", "/api/swagger", "/api/docs"})
     public ResponseEntity<Void> swaggerAlias(HttpServletRequest request) {
-        return ResponseEntity.status(HttpStatus.FOUND).location(URI.create("/api/docs")).build();
+        return ResponseEntity.status(HttpStatus.FOUND).location(URI.create("/api/admin/docs")).build();
     }
 }

@@ -33,10 +33,14 @@ public class CamelCaseResponseAdvice implements ResponseBodyAdvice<Object> {
     ) {
         String path = request.getURI().getPath();
         boolean reportTemplatesPath = path != null && path.endsWith("/report-templates");
-        boolean reportTemplatePath = path != null && path.startsWith("/api/report-template");
+        boolean reportTemplatePath =
+            path != null && (path.startsWith("/api/report-template") || path.startsWith("/api/admin/report-template"));
+        boolean listEmployeesPath = "/api/list_employees".equals(path) || "/api/admin/list_employees".equals(path);
+        boolean relationPath =
+            path != null && (path.startsWith("/api/relation") || path.startsWith("/api/admin/relation"));
         if (
-            "/api/list_employees".equals(path) ||
-            path.startsWith("/api/relation") ||
+            listEmployeesPath ||
+            relationPath ||
             reportTemplatesPath ||
             reportTemplatePath
         ) {

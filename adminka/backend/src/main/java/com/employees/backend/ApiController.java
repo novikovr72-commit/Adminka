@@ -84,7 +84,7 @@ import java.util.regex.Pattern;
 import javax.imageio.ImageIO;
 
 @RestController
-@RequestMapping("/api")
+@RequestMapping({"/api/admin", "/api"})
 public class ApiController {
 
     private static final Set<String> ALLOWED_STATUS = Set.of("ACTIVE", "INACTIVE");
@@ -1298,7 +1298,12 @@ public class ApiController {
                 Files.writeString(logsDir.resolve(logFileName), logContent, StandardCharsets.UTF_8);
                 String host = request.getHeader("host");
                 if (StringUtils.hasText(host)) {
-                    logFileUrl = request.getScheme() + "://" + host + "/api/import-logs/" + URLEncoder.encode(logFileName, StandardCharsets.UTF_8);
+                    logFileUrl =
+                        request.getScheme() +
+                        "://" +
+                        host +
+                        "/api/admin/import-logs/" +
+                        URLEncoder.encode(logFileName, StandardCharsets.UTF_8);
                 }
             } catch (IOException ignored) {
                 logFileUrl = null;
@@ -2108,7 +2113,35 @@ public class ApiController {
         if (numberDays == null) {
             return badRequest("Шаблон отчета не найден");
         }
-        String sqlForExplain = toReportTemplateCheckSql(sqlQuery, reportTemplateId, numberDays);
+        String claimOrganizationId = normalizeText(body.get("claimOrganizationId"));
+        if (
+            claimOrganizationId != null &&
+            !claimOrganizationId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
+        ) {
+            return badRequest("Параметр claimOrganizationId должен быть UUID");
+        }
+        String reportId = normalizeText(body.get("reportId"));
+        if (
+            reportId != null &&
+            !reportId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
+        ) {
+            return badRequest("Параметр reportId должен быть UUID");
+        }
+        List<String> roleNames = normalizeRoleNames(body.get("roleNames"));
+        String method = getReportTemplateMethod(reportTemplateId);
+        if ("HAND".equalsIgnoreCase(method) && roleNames.isEmpty()) {
+            return badRequest("Для отчетов с method=HAND параметр roleNames обязателен");
+        }
+        String sqlForExplain = toReportTemplateCheckSql(
+            sqlQuery,
+            reportTemplateId,
+            numberDays,
+            null,
+            null,
+            claimOrganizationId,
+            reportId,
+            roleNames
+        );
 
         try {
             jdbcTemplate.queryForList("explain " + sqlForExplain);
@@ -2411,7 +2444,35 @@ public class ApiController {
         if (numberDays == null) {
             return badRequest("Шаблон отчета не найден");
         }
-        String sqlForExecution = toReportTemplateCheckSql(sqlQuery, reportTemplateId, numberDays);
+        String claimOrganizationId = normalizeText(body.get("claimOrganizationId"));
+        if (
+            claimOrganizationId != null &&
+            !claimOrganizationId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
+        ) {
+            return badRequest("Параметр claimOrganizationId должен быть UUID");
+        }
+        String reportId = normalizeText(body.get("reportId"));
+        if (
+            reportId != null &&
+            !reportId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
+        ) {
+            return badRequest("Параметр reportId должен быть UUID");
+        }
+        List<String> roleNames = normalizeRoleNames(body.get("roleNames"));
+        String method = getReportTemplateMethod(reportTemplateId);
+        if ("HAND".equalsIgnoreCase(method) && roleNames.isEmpty()) {
+            return badRequest("Для отчетов с method=HAND параметр roleNames обязателен");
+        }
+        String sqlForExecution = toReportTemplateCheckSql(
+            sqlQuery,
+            reportTemplateId,
+            numberDays,
+            null,
+            null,
+            claimOrganizationId,
+            reportId,
+            roleNames
+        );
         String countSql = "select count(*)::bigint as total_count from (" + sqlForExecution + ") report_sql_check";
 
         try {
@@ -2468,7 +2529,8 @@ public class ApiController {
                 """
                 select
                   rt.sql_query as sql_query,
-                  coalesce(rt.number_days, 0)::int as number_days
+                  coalesce(rt.number_days, 0)::int as number_days,
+                  upper(coalesce(rt.method, 'AUTO')) as method
                 from public.report_templates rt
                 where rt.id = ?::uuid
                   and rt.deleted = false
@@ -2487,7 +2549,35 @@ public class ApiController {
             Integer numberDays = template.get("number_days") instanceof Number value
                 ? value.intValue()
                 : 0;
-            String sqlForExecution = toReportTemplateCheckSql(savedSqlQuery, reportTemplateId, numberDays);
+            String claimOrganizationId = normalizeText(body.get("claimOrganizationId"));
+            if (
+                claimOrganizationId != null &&
+                !claimOrganizationId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
+            ) {
+                return badRequest("Параметр claimOrganizationId должен быть UUID");
+            }
+            String reportId = normalizeText(body.get("reportId"));
+            if (
+                reportId != null &&
+                !reportId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
+            ) {
+                return badRequest("Параметр reportId должен быть UUID");
+            }
+            List<String> roleNames = normalizeRoleNames(body.get("roleNames"));
+            String method = normalizeText(template.get("method"));
+            if ("HAND".equalsIgnoreCase(method) && roleNames.isEmpty()) {
+                return badRequest("Для отчетов с method=HAND параметр roleNames обязателен");
+            }
+            String sqlForExecution = toReportTemplateCheckSql(
+                savedSqlQuery,
+                reportTemplateId,
+                numberDays,
+                null,
+                null,
+                claimOrganizationId,
+                reportId,
+                roleNames
+            );
             String countSql = "select count(*)::bigint as total_count from (" + sqlForExecution + ") report_sql_results";
             String pagedSql = "select * from (" + sqlForExecution + ") report_sql_results limit ? offset ?";
 
@@ -2544,6 +2634,27 @@ public class ApiController {
         return reportTemplateSqlResults(rawBody);
     }
 
+    @PostMapping("/report-template/execute")
+    public ResponseEntity<?> executeReportTemplate(
+        @RequestBody(required = false) Map<String, Object> rawBody
+    ) {
+        Map<String, Object> body = normalizeRequestBody(rawBody);
+        boolean preview = toBooleanOrDefault(body.get("preview"), false);
+        if (preview && !body.containsKey("limit")) {
+            LinkedHashMap<String, Object> previewBody = new LinkedHashMap<>(body);
+            previewBody.put("limit", 50);
+            return reportTemplateExcelPreview(previewBody);
+        }
+        return preview ? reportTemplateExcelPreview(body) : reportTemplateExcelExport(body);
+    }
+
+    @PostMapping("/report-templates/execute")
+    public ResponseEntity<?> executeReportTemplateAlias(
+        @RequestBody(required = false) Map<String, Object> rawBody
+    ) {
+        return executeReportTemplate(rawBody);
+    }
+
     @PostMapping("/report-template/excel-preview")
     public ResponseEntity<?> reportTemplateExcelPreview(
         @RequestBody(required = false) Map<String, Object> rawBody
@@ -2570,6 +2681,7 @@ public class ApiController {
                 select
                   rt.sql_query as sql_query,
                   coalesce(rt.number_days, 0)::int as number_days,
+                  upper(coalesce(rt.method, 'AUTO')) as method,
                   coalesce(nullif(trim(rt.output_file_name), ''), 'report-preview') as output_file_name,
                   coalesce(nullif(trim(rt.name), ''), 'Отчет') as report_name,
                   rt.report_info::text as report_info,
@@ -2592,6 +2704,25 @@ public class ApiController {
             Integer numberDays = template.get("number_days") instanceof Number value
                 ? value.intValue()
                 : 0;
+            String claimOrganizationId = normalizeText(body.get("claimOrganizationId"));
+            if (
+                claimOrganizationId != null &&
+                !claimOrganizationId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
+            ) {
+                return badRequest("Параметр claimOrganizationId должен быть UUID");
+            }
+            String reportId = normalizeText(body.get("reportId"));
+            if (
+                reportId != null &&
+                !reportId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
+            ) {
+                return badRequest("Параметр reportId должен быть UUID");
+            }
+            List<String> roleNames = normalizeRoleNames(body.get("roleNames"));
+            String method = normalizeText(template.get("method"));
+            if ("HAND".equalsIgnoreCase(method) && roleNames.isEmpty()) {
+                return badRequest("Для отчетов с method=HAND параметр roleNames обязателен");
+            }
             String outputFileName = normalizeText(template.get("output_file_name"));
             Map<String, Object> reportInfo = parseReportInfoObject(template.get("report_info"));
             String startReportValue = normalizeText(body.get("startReport"));
@@ -2607,7 +2738,10 @@ public class ApiController {
                 reportTemplateId,
                 numberDays,
                 startReportValue,
-                endReportValue
+                endReportValue,
+                claimOrganizationId,
+                reportId,
+                roleNames
             );
             String countSql = "select count(*)::bigint as total_count from (" + sqlForExecution + ") report_excel_preview";
             String pagedSql = "select * from (" + sqlForExecution + ") report_excel_preview limit " + limit;
@@ -2673,6 +2807,7 @@ public class ApiController {
                 select
                   rt.sql_query as sql_query,
                   coalesce(rt.number_days, 0)::int as number_days,
+                  upper(coalesce(rt.method, 'AUTO')) as method,
                   coalesce(nullif(trim(rt.output_file_name), ''), 'report') as output_file_name,
                   coalesce(nullif(trim(rt.output_file_type), ''), 'xlsx') as output_file_type,
                   coalesce(nullif(trim(rt.name), ''), 'Отчет') as report_name,
@@ -2705,12 +2840,34 @@ public class ApiController {
             }
 
             Integer numberDays = template.get("number_days") instanceof Number value ? value.intValue() : 0;
+            String claimOrganizationId = normalizeText(body.get("claimOrganizationId"));
+            if (
+                claimOrganizationId != null &&
+                !claimOrganizationId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
+            ) {
+                return badRequest("Параметр claimOrganizationId должен быть UUID");
+            }
+            String reportId = normalizeText(body.get("reportId"));
+            if (
+                reportId != null &&
+                !reportId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
+            ) {
+                return badRequest("Параметр reportId должен быть UUID");
+            }
+            List<String> roleNames = normalizeRoleNames(body.get("roleNames"));
+            String method = normalizeText(template.get("method"));
+            if ("HAND".equalsIgnoreCase(method) && roleNames.isEmpty()) {
+                return badRequest("Для отчетов с method=HAND параметр roleNames обязателен");
+            }
             String sqlForExecution = toReportTemplateCheckSql(
                 savedSqlQuery,
                 reportTemplateId,
                 numberDays,
                 startReportValue,
-                endReportValue
+                endReportValue,
+                claimOrganizationId,
+                reportId,
+                roleNames
             );
 
             List<ReportFieldConfig> visibleFields = resolveVisibleReportFields(reportInfo);
@@ -2778,7 +2935,35 @@ public class ApiController {
         if (numberDays == null) {
             return badRequest("Шаблон отчета не найден");
         }
-        String sqlForExplain = toReportTemplateCheckSql(sqlQuery, normalizedReportTemplateId, numberDays);
+        String claimOrganizationId = normalizeText(body.get("claimOrganizationId"));
+        if (
+            claimOrganizationId != null &&
+            !claimOrganizationId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
+        ) {
+            return badRequest("Параметр claimOrganizationId должен быть UUID");
+        }
+        String reportId = normalizeText(body.get("reportId"));
+        if (
+            reportId != null &&
+            !reportId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
+        ) {
+            return badRequest("Параметр reportId должен быть UUID");
+        }
+        List<String> roleNames = normalizeRoleNames(body.get("roleNames"));
+        String method = getReportTemplateMethod(normalizedReportTemplateId);
+        if ("HAND".equalsIgnoreCase(method) && roleNames.isEmpty()) {
+            return badRequest("Для отчетов с method=HAND параметр roleNames обязателен");
+        }
+        String sqlForExplain = toReportTemplateCheckSql(
+            sqlQuery,
+            normalizedReportTemplateId,
+            numberDays,
+            null,
+            null,
+            claimOrganizationId,
+            reportId,
+            roleNames
+        );
 
         try {
             jdbcTemplate.queryForList("explain " + sqlForExplain);
@@ -5991,8 +6176,61 @@ public class ApiController {
         }
     }
 
+    private String getReportTemplateMethod(String reportTemplateId) {
+        try {
+            return jdbcTemplate.queryForObject(
+                """
+                select upper(coalesce(rt.method, 'AUTO'))
+                from public.report_templates rt
+                where rt.id = ?::uuid
+                  and rt.deleted = false
+                """,
+                String.class,
+                reportTemplateId
+            );
+        } catch (Exception exception) {
+            return null;
+        }
+    }
+
+    private List<String> normalizeRoleNames(Object rawRoleNames) {
+        if (rawRoleNames instanceof List<?> listValue) {
+            List<String> result = new ArrayList<>();
+            for (Object item : listValue) {
+                String normalized = normalizeText(item);
+                if (normalized != null && !normalized.isBlank()) {
+                    result.add(normalized);
+                }
+            }
+            return result;
+        }
+        String asText = normalizeText(rawRoleNames);
+        if (asText == null) {
+            return List.of();
+        }
+        List<String> result = new ArrayList<>();
+        for (String token : asText.split(",")) {
+            String normalized = normalizeText(token);
+            if (normalized != null && !normalized.isBlank()) {
+                result.add(normalized);
+            }
+        }
+        return result;
+    }
+
+    private String toSqlTextArrayLiteral(List<String> roleNames) {
+        if (roleNames == null || roleNames.isEmpty()) {
+            return "ARRAY[]::text[]";
+        }
+        String joined = roleNames
+            .stream()
+            .map(this::toSqlStringOrNull)
+            .collect(Collectors.joining(", "));
+        return "ARRAY[" + joined + "]::text[]";
+    }
+
     private String toReportTemplateCheckSql(String sqlQuery, String reportTemplateId, Integer numberDays) {
-        return toReportTemplateCheckSql(sqlQuery, reportTemplateId, numberDays, null, null);
+        return toReportTemplateCheckSql(sqlQuery, reportTemplateId, numberDays, null, null, null, reportTemplateId, List.of());
     }
 
     private String toReportTemplateCheckSql(
@@ -6002,24 +6240,52 @@ public class ApiController {
         String startReportValue,
         String endReportValue
     ) {
+        return toReportTemplateCheckSql(
+            sqlQuery,
+            reportTemplateId,
+            numberDays,
+            startReportValue,
+            endReportValue,
+            null,
+            reportTemplateId,
+            List.of()
+        );
+    }
+
+    private String toReportTemplateCheckSql(
+        String sqlQuery,
+        String reportTemplateId,
+        Integer numberDays,
+        String startReportValue,
+        String endReportValue,
+        String claimOrganizationId,
+        String reportId,
+        List<String> roleNames
+    ) {
         if (sqlQuery == null) {
             return "";
         }
         String normalized = normalizeSingleSqlStatement(sqlQuery);
+        String roleNamesArrayLiteral = toSqlTextArrayLiteral(roleNames);
         normalized = normalized.replaceAll(
             "(?i)array\\s*\\[\\s*:roleNames\\s*\\](\\s*::\\s*[a-zA-Z0-9_\\[\\]]+)?",
-            "ARRAY['nl-gsg-claim-master-all']::varchar[]"
+            roleNamesArrayLiteral
         );
         normalized = replaceNamedSqlParameter(normalized, "startReport", toSqlStringOrNull(startReportValue));
         normalized = replaceNamedSqlParameter(normalized, "endReport", toSqlStringOrNull(endReportValue));
-        normalized = replaceNamedSqlParameter(normalized, "claimOrganizationId", "NULL");
+        normalized = replaceNamedSqlParameter(normalized, "claimOrganizationId", toSqlStringOrNull(claimOrganizationId));
         normalized = replaceNamedSqlParameter(
             normalized,
             "numberDays",
             String.valueOf(numberDays == null ? 0 : numberDays)
         );
-        normalized = replaceNamedSqlParameter(normalized, "reportId", "'" + reportTemplateId + "'");
-        normalized = replaceNamedSqlParameter(normalized, "roleNames", "'nl-gsg-claim-master-all'");
+        String resolvedReportId = normalizeText(reportId);
+        if (resolvedReportId == null) {
+            resolvedReportId = reportTemplateId;
+        }
+        normalized = replaceNamedSqlParameter(normalized, "reportId", toSqlStringOrNull(resolvedReportId));
+        String firstRoleName = roleNames == null || roleNames.isEmpty() ? null : roleNames.get(0);
+        normalized = replaceNamedSqlParameter(normalized, "roleNames", toSqlStringOrNull(firstRoleName));
         // Replace named params like :startReport with NULL for syntax check.
         // Negative lookbehind avoids matching PostgreSQL casts like ::date.
         // Keep replacement length close to original to preserve Position mapping.

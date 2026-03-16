@@ -35,7 +35,12 @@ cp frontend/.env.example frontend/.env
 ## Адреса
 
 - Frontend: `http://localhost:5175`
-- Backend: `http://localhost:3003/api/health`
-- DB health: `http://localhost:3003/api/db-health`
-- Swagger UI: `http://localhost:3003/api/docs`
-- OpenAPI JSON: `http://localhost:3003/api/openapi.json`
+- Backend: `http://localhost:3003/api/admin/health`
+- DB health: `http://localhost:3003/api/admin/db-health`
+- Swagger UI: `http://localhost:3003/api/admin/docs`
+- OpenAPI JSON: `http://localhost:3003/api/admin/openapi.json`
+
+## Интеграция экспорта отчетов
+
+- Полная инструкция для backend-интеграции: `REPORT_EXPORT_INTEGRATION_GUIDE.md`
+- OpenAPI контракт для внешних модулей: `docs/api/openapi-report-export.json`

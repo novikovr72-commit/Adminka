@@ -36,54 +36,56 @@ public class OpenApiSchemasConfig {
             ensureComponents(openApi);
             registerSchemas(openApi.getComponents().getSchemas());
 
-            setJsonResponse(openApi, "/api/health", PathItem.HttpMethod.GET, "HealthResponse");
-            setJsonResponse(openApi, "/api/db-health", PathItem.HttpMethod.GET, "DbHealthResponse");
-            setJsonResponse(openApi, "/api/list_organizations", PathItem.HttpMethod.GET, "OrganizationLookupResponse");
-            setJsonResponse(openApi, "/api/list_relations", PathItem.HttpMethod.GET, "LookupListResponse");
-            setJsonResponse(openApi, "/api/list_product_groups", PathItem.HttpMethod.GET, "LookupListResponse");
-            setJsonResponse(openApi, "/api/list_positions", PathItem.HttpMethod.GET, "PositionLookupResponse");
-            setJsonResponse(openApi, "/api/list_employees", PathItem.HttpMethod.GET, "EmployeeLookupResponse");
-            setJsonRequest(openApi, "/api/relations", PathItem.HttpMethod.POST, "application/json", "RelationsQueryRequest");
-            setJsonResponse(openApi, "/api/relations", PathItem.HttpMethod.POST, "RelationsResponse");
+            setJsonResponse(openApi, "/api/admin/health", PathItem.HttpMethod.GET, "HealthResponse");
+            setJsonResponse(openApi, "/api/admin/db-health", PathItem.HttpMethod.GET, "DbHealthResponse");
+            setJsonResponse(openApi, "/api/admin/list_organizations", PathItem.HttpMethod.GET, "OrganizationLookupResponse");
+            setJsonResponse(openApi, "/api/admin/list_relations", PathItem.HttpMethod.GET, "LookupListResponse");
+            setJsonResponse(openApi, "/api/admin/list_product_groups", PathItem.HttpMethod.GET, "LookupListResponse");
+            setJsonResponse(openApi, "/api/admin/list_positions", PathItem.HttpMethod.GET, "PositionLookupResponse");
+            setJsonResponse(openApi, "/api/admin/list_employees", PathItem.HttpMethod.GET, "EmployeeLookupResponse");
+            setJsonRequest(openApi, "/api/admin/relations", PathItem.HttpMethod.POST, "application/json", "RelationsQueryRequest");
+            setJsonResponse(openApi, "/api/admin/relations", PathItem.HttpMethod.POST, "RelationsResponse");
 
-            setJsonResponse(openApi, "/api/employees", PathItem.HttpMethod.GET, "MethodHintResponse");
-            setJsonRequest(openApi, "/api/employees", PathItem.HttpMethod.POST, "application/json", "EmployeesQueryRequest");
-            setJsonResponse(openApi, "/api/employees", PathItem.HttpMethod.POST, "EmployeesQueryResponse");
-            setJsonRequest(openApi, "/api/employees/export", PathItem.HttpMethod.POST, "application/json", "EmployeesExportRequest");
-            setBinaryResponse(openApi, "/api/employees/export", PathItem.HttpMethod.POST);
-            setMultipartRequest(openApi, "/api/employees/import", PathItem.HttpMethod.POST, "EmployeesImportRequest");
-            setJsonResponse(openApi, "/api/employees/import", PathItem.HttpMethod.POST, "ImportResponse");
+            setJsonResponse(openApi, "/api/admin/employees", PathItem.HttpMethod.GET, "MethodHintResponse");
+            setJsonRequest(openApi, "/api/admin/employees", PathItem.HttpMethod.POST, "application/json", "EmployeesQueryRequest");
+            setJsonResponse(openApi, "/api/admin/employees", PathItem.HttpMethod.POST, "EmployeesQueryResponse");
+            setJsonRequest(openApi, "/api/admin/employees/export", PathItem.HttpMethod.POST, "application/json", "EmployeesExportRequest");
+            setBinaryResponse(openApi, "/api/admin/employees/export", PathItem.HttpMethod.POST);
+            setMultipartRequest(openApi, "/api/admin/employees/import", PathItem.HttpMethod.POST, "EmployeesImportRequest");
+            setJsonResponse(openApi, "/api/admin/employees/import", PathItem.HttpMethod.POST, "ImportResponse");
 
-            setJsonResponse(openApi, "/api/organizations", PathItem.HttpMethod.GET, "MethodHintResponse");
-            setJsonRequest(openApi, "/api/organizations", PathItem.HttpMethod.POST, "application/json", "OrganizationsQueryRequest");
-            setJsonResponse(openApi, "/api/organizations", PathItem.HttpMethod.POST, "OrganizationsQueryResponse");
-            setJsonRequest(openApi, "/api/organizations/export", PathItem.HttpMethod.POST, "application/json", "OrganizationsExportRequest");
-            setBinaryResponse(openApi, "/api/organizations/export", PathItem.HttpMethod.POST);
+            setJsonResponse(openApi, "/api/admin/organizations", PathItem.HttpMethod.GET, "MethodHintResponse");
+            setJsonRequest(openApi, "/api/admin/organizations", PathItem.HttpMethod.POST, "application/json", "OrganizationsQueryRequest");
+            setJsonResponse(openApi, "/api/admin/organizations", PathItem.HttpMethod.POST, "OrganizationsQueryResponse");
+            setJsonRequest(openApi, "/api/admin/organizations/export", PathItem.HttpMethod.POST, "application/json", "OrganizationsExportRequest");
+            setBinaryResponse(openApi, "/api/admin/organizations/export", PathItem.HttpMethod.POST);
 
-            setJsonResponse(openApi, "/api/report-templates", PathItem.HttpMethod.GET, "MethodHintResponse");
-            setJsonRequest(openApi, "/api/report-templates", PathItem.HttpMethod.POST, "application/json", "ReportTemplatesQueryRequest");
-            setJsonResponse(openApi, "/api/report-templates", PathItem.HttpMethod.POST, "ReportTemplatesQueryResponse");
+            setJsonResponse(openApi, "/api/admin/report-templates", PathItem.HttpMethod.GET, "MethodHintResponse");
+            setJsonRequest(openApi, "/api/admin/report-templates", PathItem.HttpMethod.POST, "application/json", "ReportTemplatesQueryRequest");
+            setJsonResponse(openApi, "/api/admin/report-templates", PathItem.HttpMethod.POST, "ReportTemplatesQueryResponse");
+            setJsonRequest(openApi, "/api/admin/report-template/execute", PathItem.HttpMethod.POST, "application/json", "ReportTemplateExecuteRequest");
+            setBinaryResponse(openApi, "/api/admin/report-template/execute", PathItem.HttpMethod.POST);
 
-            setJsonRequest(openApi, "/api/relation/{employeeId}", PathItem.HttpMethod.POST, "application/json", "EmployeeRelationsQueryRequest");
-            setJsonResponse(openApi, "/api/relation/{employeeId}", PathItem.HttpMethod.POST, "EmployeeRelationsResponse");
+            setJsonRequest(openApi, "/api/admin/relation/{employeeId}", PathItem.HttpMethod.POST, "application/json", "EmployeeRelationsQueryRequest");
+            setJsonResponse(openApi, "/api/admin/relation/{employeeId}", PathItem.HttpMethod.POST, "EmployeeRelationsResponse");
 
-            setJsonRequest(openApi, "/api/relation", PathItem.HttpMethod.POST, "application/json", "RelationMutationRequest");
-            setJsonResponse(openApi, "/api/relation", PathItem.HttpMethod.POST, "RelationMutationResponse");
+            setJsonRequest(openApi, "/api/admin/relation", PathItem.HttpMethod.POST, "application/json", "RelationMutationRequest");
+            setJsonResponse(openApi, "/api/admin/relation", PathItem.HttpMethod.POST, "RelationMutationResponse");
 
-            setJsonRequest(openApi, "/api/relation/{relationId}", PathItem.HttpMethod.PATCH, "application/json", "RelationMutationRequest");
-            setJsonResponse(openApi, "/api/relation/{relationId}", PathItem.HttpMethod.PATCH, "RelationMutationResponse");
-            setJsonResponse(openApi, "/api/relation/{relationId}", PathItem.HttpMethod.DELETE, "DeleteResponse");
+            setJsonRequest(openApi, "/api/admin/relation/{relationId}", PathItem.HttpMethod.PATCH, "application/json", "RelationMutationRequest");
+            setJsonResponse(openApi, "/api/admin/relation/{relationId}", PathItem.HttpMethod.PATCH, "RelationMutationResponse");
+            setJsonResponse(openApi, "/api/admin/relation/{relationId}", PathItem.HttpMethod.DELETE, "DeleteResponse");
 
-            setJsonResponse(openApi, "/api/employee-position/{employeeOrganId}", PathItem.HttpMethod.DELETE, "DeleteResponse");
-            setJsonRequest(openApi, "/api/employee-position", PathItem.HttpMethod.POST, "application/json", "EmployeePositionMutationRequest");
-            setJsonResponse(openApi, "/api/employee-position", PathItem.HttpMethod.POST, "EmployeePositionMutationResponse");
-            setJsonRequest(openApi, "/api/employee-position/{employeeOrganId}", PathItem.HttpMethod.PATCH, "application/json", "EmployeePositionMutationRequest");
-            setJsonResponse(openApi, "/api/employee-position/{employeeOrganId}", PathItem.HttpMethod.PATCH, "EmployeePositionMutationResponse");
-            setJsonRequest(openApi, "/api/employee", PathItem.HttpMethod.POST, "application/json", "EmployeeSaveRequest");
-            setJsonResponse(openApi, "/api/employee", PathItem.HttpMethod.POST, "EmployeeSaveResponse");
-            setJsonRequest(openApi, "/api/employee/{employeeId}", PathItem.HttpMethod.PATCH, "application/json", "EmployeeSaveRequest");
-            setJsonResponse(openApi, "/api/employee/{employeeId}", PathItem.HttpMethod.PATCH, "EmployeeSaveResponse");
-            setJsonResponse(openApi, "/api/employee/{employeeId}", PathItem.HttpMethod.DELETE, "DeleteResponse");
+            setJsonResponse(openApi, "/api/admin/employee-position/{employeeOrganId}", PathItem.HttpMethod.DELETE, "DeleteResponse");
+            setJsonRequest(openApi, "/api/admin/employee-position", PathItem.HttpMethod.POST, "application/json", "EmployeePositionMutationRequest");
+            setJsonResponse(openApi, "/api/admin/employee-position", PathItem.HttpMethod.POST, "EmployeePositionMutationResponse");
+            setJsonRequest(openApi, "/api/admin/employee-position/{employeeOrganId}", PathItem.HttpMethod.PATCH, "application/json", "EmployeePositionMutationRequest");
+            setJsonResponse(openApi, "/api/admin/employee-position/{employeeOrganId}", PathItem.HttpMethod.PATCH, "EmployeePositionMutationResponse");
+            setJsonRequest(openApi, "/api/admin/employee", PathItem.HttpMethod.POST, "application/json", "EmployeeSaveRequest");
+            setJsonResponse(openApi, "/api/admin/employee", PathItem.HttpMethod.POST, "EmployeeSaveResponse");
+            setJsonRequest(openApi, "/api/admin/employee/{employeeId}", PathItem.HttpMethod.PATCH, "application/json", "EmployeeSaveRequest");
+            setJsonResponse(openApi, "/api/admin/employee/{employeeId}", PathItem.HttpMethod.PATCH, "EmployeeSaveResponse");
+            setJsonResponse(openApi, "/api/admin/employee/{employeeId}", PathItem.HttpMethod.DELETE, "DeleteResponse");
 
             removeLegacySnakeCaseParameters(openApi);
             setDefaultErrorSchemas(openApi);
@@ -556,6 +558,20 @@ public class OpenApiSchemasConfig {
                 "sorts", refArray("SortRule")
             ),
             "ok", "items", "count", "total_count"
+        ));
+
+        schemas.putIfAbsent("ReportTemplateExecuteRequest", objectSchema(
+            Map.ofEntries(
+                Map.entry("reportTemplateId", new StringSchema()),
+                Map.entry("reportId", new StringSchema()),
+                Map.entry("startReport", new StringSchema()),
+                Map.entry("endReport", new StringSchema()),
+                Map.entry("claimOrganizationId", new StringSchema()),
+                Map.entry("roleNames", new ArraySchema().items(new StringSchema())),
+                Map.entry("preview", new BooleanSchema()),
+                Map.entry("limit", new IntegerSchema())
+            ),
+            "reportTemplateId"
         ));
 
         schemas.putIfAbsent("EmployeePositionMutationRequest", objectSchema(

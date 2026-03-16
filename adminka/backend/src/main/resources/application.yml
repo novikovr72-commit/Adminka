@@ -13,9 +13,9 @@ spring:
 
 springdoc:
   swagger-ui:
-    path: /api/docs
+    path: /api/admin/docs
   api-docs:
-    path: /api/openapi.json
+    path: /api/admin/openapi.json
 
 app:
   logs-dir: ${IMPORT_LOGS_DIR:backend/logs}

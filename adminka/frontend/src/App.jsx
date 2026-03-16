@@ -31,57 +31,58 @@ const REPORT_TEMPLATE_GENERAL_PARAMETER_COLUMN_WIDTH_STORAGE_KEY =
   "report-template.general-parameter-column-width";
 const REPORT_TEMPLATE_GENERAL_SORT_DIRECTION_STORAGE_KEY = "report-template.general-sort-direction";
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3003").replace(/\/+$/, "");
-const EMPLOYEES_API_URL = `${API_BASE_URL}/api/employees`;
-const ORGANIZATIONS_API_URL = `${API_BASE_URL}/api/organizations`;
-const RELATIONS_API_URL = `${API_BASE_URL}/api/relations`;
-const REPORT_TEMPLATES_API_URL = `${API_BASE_URL}/api/report-templates`;
-const REPORT_TEMPLATE_SQL_VALIDATE_API_URL = `${API_BASE_URL}/api/report-template/sql/validate`;
-const REPORT_TEMPLATES_SQL_VALIDATE_API_URL = `${API_BASE_URL}/api/report-templates/sql/validate`;
-const REPORT_TEMPLATE_SQL_RESULTS_API_URL = `${API_BASE_URL}/api/report-template/sql/results`;
-const REPORT_TEMPLATES_SQL_RESULTS_API_URL = `${API_BASE_URL}/api/report-templates/sql/results`;
-const REPORT_TEMPLATE_EXCEL_PREVIEW_API_URL = `${API_BASE_URL}/api/report-template/excel-preview`;
-const REPORT_TEMPLATES_EXCEL_PREVIEW_API_URL = `${API_BASE_URL}/api/report-templates/excel-preview`;
-const REPORT_TEMPLATE_EXCEL_API_URL = `${API_BASE_URL}/api/report-template/excel`;
-const REPORT_TEMPLATES_EXCEL_API_URL = `${API_BASE_URL}/api/report-templates/excel`;
+const ADMIN_API_BASE_URL = `${API_BASE_URL}/api/admin`;
+const EMPLOYEES_API_URL = `${ADMIN_API_BASE_URL}/employees`;
+const ORGANIZATIONS_API_URL = `${ADMIN_API_BASE_URL}/organizations`;
+const RELATIONS_API_URL = `${ADMIN_API_BASE_URL}/relations`;
+const REPORT_TEMPLATES_API_URL = `${ADMIN_API_BASE_URL}/report-templates`;
+const REPORT_TEMPLATE_SQL_VALIDATE_API_URL = `${ADMIN_API_BASE_URL}/report-template/sql/validate`;
+const REPORT_TEMPLATES_SQL_VALIDATE_API_URL = `${ADMIN_API_BASE_URL}/report-templates/sql/validate`;
+const REPORT_TEMPLATE_SQL_RESULTS_API_URL = `${ADMIN_API_BASE_URL}/report-template/sql/results`;
+const REPORT_TEMPLATES_SQL_RESULTS_API_URL = `${ADMIN_API_BASE_URL}/report-templates/sql/results`;
+const REPORT_TEMPLATE_EXCEL_PREVIEW_API_URL = `${ADMIN_API_BASE_URL}/report-template/excel-preview`;
+const REPORT_TEMPLATES_EXCEL_PREVIEW_API_URL = `${ADMIN_API_BASE_URL}/report-templates/excel-preview`;
+const REPORT_TEMPLATE_EXCEL_API_URL = `${ADMIN_API_BASE_URL}/report-template/excel`;
+const REPORT_TEMPLATES_EXCEL_API_URL = `${ADMIN_API_BASE_URL}/report-templates/excel`;
 const REPORT_PREVIEW_MAX_RECORDS = 50;
 const REPORT_TEMPLATE_SETTINGS_API_PATH = (reportTemplateId) =>
-  `${API_BASE_URL}/api/report-template/${reportTemplateId}/template-settings`;
+  `${ADMIN_API_BASE_URL}/report-template/${reportTemplateId}/template-settings`;
 const REPORT_TEMPLATES_SETTINGS_API_PATH = (reportTemplateId) =>
-  `${API_BASE_URL}/api/report-templates/${reportTemplateId}/template-settings`;
+  `${ADMIN_API_BASE_URL}/report-templates/${reportTemplateId}/template-settings`;
 const REPORT_TEMPLATE_MAIN_SETTINGS_API_PATH = (reportTemplateId) =>
-  `${API_BASE_URL}/api/report-template/${reportTemplateId}`;
+  `${ADMIN_API_BASE_URL}/report-template/${reportTemplateId}`;
 const REPORT_TEMPLATES_MAIN_SETTINGS_API_PATH = (reportTemplateId) =>
-  `${API_BASE_URL}/api/report-templates/${reportTemplateId}`;
-const REPORT_TEMPLATE_CREATE_API_URL = `${API_BASE_URL}/api/report-template`;
-const REPORT_TEMPLATES_CREATE_API_URL = `${API_BASE_URL}/api/report-templates/create`;
+  `${ADMIN_API_BASE_URL}/report-templates/${reportTemplateId}`;
+const REPORT_TEMPLATE_CREATE_API_URL = `${ADMIN_API_BASE_URL}/report-template`;
+const REPORT_TEMPLATES_CREATE_API_URL = `${ADMIN_API_BASE_URL}/report-templates/create`;
 const REPORT_TEMPLATE_ORGANIZATION_DELETE_API_PATH = (reportTemplateId, organUnitId) =>
-  `${API_BASE_URL}/api/report-template/${reportTemplateId}/organizations/${organUnitId}`;
+  `${ADMIN_API_BASE_URL}/report-template/${reportTemplateId}/organizations/${organUnitId}`;
 const REPORT_TEMPLATES_ORGANIZATION_DELETE_API_PATH = (reportTemplateId, organUnitId) =>
-  `${API_BASE_URL}/api/report-templates/${reportTemplateId}/organizations/${organUnitId}`;
+  `${ADMIN_API_BASE_URL}/report-templates/${reportTemplateId}/organizations/${organUnitId}`;
 const REPORT_TEMPLATE_ORGANIZATION_ADD_API_PATH = (reportTemplateId) =>
-  `${API_BASE_URL}/api/report-template/${reportTemplateId}/organizations`;
+  `${ADMIN_API_BASE_URL}/report-template/${reportTemplateId}/organizations`;
 const REPORT_TEMPLATES_ORGANIZATION_ADD_API_PATH = (reportTemplateId) =>
-  `${API_BASE_URL}/api/report-templates/${reportTemplateId}/organizations`;
+  `${ADMIN_API_BASE_URL}/report-templates/${reportTemplateId}/organizations`;
 const REPORT_TEMPLATE_ACCESS_GROUP_DELETE_API_PATH = (reportTemplateId, codeAccess) =>
-  `${API_BASE_URL}/api/report-template/${reportTemplateId}/access-groups?codeAccess=${encodeURIComponent(
+  `${ADMIN_API_BASE_URL}/report-template/${reportTemplateId}/access-groups?codeAccess=${encodeURIComponent(
     String(codeAccess ?? "")
   )}`;
 const REPORT_TEMPLATES_ACCESS_GROUP_DELETE_API_PATH = (reportTemplateId, codeAccess) =>
-  `${API_BASE_URL}/api/report-templates/${reportTemplateId}/access-groups?codeAccess=${encodeURIComponent(
+  `${ADMIN_API_BASE_URL}/report-templates/${reportTemplateId}/access-groups?codeAccess=${encodeURIComponent(
     String(codeAccess ?? "")
   )}`;
 const REPORT_TEMPLATE_ACCESS_GROUP_ADD_API_PATH = (reportTemplateId) =>
-  `${API_BASE_URL}/api/report-template/${reportTemplateId}/access-groups`;
+  `${ADMIN_API_BASE_URL}/report-template/${reportTemplateId}/access-groups`;
 const REPORT_TEMPLATES_ACCESS_GROUP_ADD_API_PATH = (reportTemplateId) =>
-  `${API_BASE_URL}/api/report-templates/${reportTemplateId}/access-groups`;
+  `${ADMIN_API_BASE_URL}/report-templates/${reportTemplateId}/access-groups`;
 const REPORT_ACCESS_GROUP_ENUM = Array.from({ length: 10 }, (_, index) => `GRP${String(index + 1).padStart(2, "0")}`);
 const REPORT_SQL_RESULTS_PAGE_SIZE = 500;
-const EMPLOYEES_IMPORT_API_URL = `${API_BASE_URL}/api/employees/import`;
-const LIST_ORGANIZATIONS_API_URL = `${API_BASE_URL}/api/list_organizations`;
-const LIST_RELATIONS_API_URL = `${API_BASE_URL}/api/list_relations`;
-const LIST_PRODUCT_GROUPS_API_URL = `${API_BASE_URL}/api/list_product_groups`;
-const LIST_POSITIONS_API_URL = `${API_BASE_URL}/api/list_positions`;
-const LIST_EMPLOYEES_API_URL = `${API_BASE_URL}/api/list_employees`;
+const EMPLOYEES_IMPORT_API_URL = `${ADMIN_API_BASE_URL}/employees/import`;
+const LIST_ORGANIZATIONS_API_URL = `${ADMIN_API_BASE_URL}/list_organizations`;
+const LIST_RELATIONS_API_URL = `${ADMIN_API_BASE_URL}/list_relations`;
+const LIST_PRODUCT_GROUPS_API_URL = `${ADMIN_API_BASE_URL}/list_product_groups`;
+const LIST_POSITIONS_API_URL = `${ADMIN_API_BASE_URL}/list_positions`;
+const LIST_EMPLOYEES_API_URL = `${ADMIN_API_BASE_URL}/list_employees`;
 const ALLOWED_SORT_FIELDS = new Set([
   "fullName",
   "sapId",
@@ -2422,6 +2423,102 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     }
   }, [reportTemplateJsonInitial]);
   const isReportPreviewTabAvailable = hasReportSqlForPreview && hasJsonbWithVisibleFieldsForPreview;
+  const getAuthRoleNamesFromJwt = useCallback(() => {
+    const decodeJwtPayload = (token) => {
+      const text = String(token ?? "").trim();
+      const parts = text.split(".");
+      if (parts.length < 2) {
+        return null;
+      }
+      const payloadPart = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+      const padded = payloadPart + "=".repeat((4 - (payloadPart.length % 4 || 4)) % 4);
+      try {
+        const decoded = atob(padded);
+        return JSON.parse(decoded);
+      } catch {
+        return null;
+      }
+    };
+    const collectRoles = (payload) => {
+      if (!payload || typeof payload !== "object") {
+        return [];
+      }
+      const roles = new Set();
+      const pushRole = (value) => {
+        const text = String(value ?? "").trim();
+        if (text) {
+          roles.add(text);
+        }
+      };
+      const realmRoles = Array.isArray(payload?.realm_access?.roles) ? payload.realm_access.roles : [];
+      realmRoles.forEach(pushRole);
+      const resourceAccess =
+        payload?.resource_access && typeof payload.resource_access === "object"
+          ? payload.resource_access
+          : null;
+      if (resourceAccess) {
+        Object.values(resourceAccess).forEach((entry) => {
+          const clientRoles = Array.isArray(entry?.roles) ? entry.roles : [];
+          clientRoles.forEach(pushRole);
+        });
+      }
+      const directRoles = Array.isArray(payload?.roles) ? payload.roles : [];
+      directRoles.forEach(pushRole);
+      const authorities = Array.isArray(payload?.authorities) ? payload.authorities : [];
+      authorities.forEach(pushRole);
+      return [...roles];
+    };
+    const tokenKeys = ["kc_token", "access_token", "token", "keycloakToken"];
+    for (const storage of [window.localStorage, window.sessionStorage]) {
+      for (const key of tokenKeys) {
+        const token = storage?.getItem?.(key);
+        if (!token) {
+          continue;
+        }
+        const payload = decodeJwtPayload(token);
+        const roles = collectRoles(payload);
+        if (roles.length > 0) {
+          return roles;
+        }
+      }
+    }
+    return [];
+  }, []);
+  const buildReportExecutionPayload = useCallback(
+    (reportTemplateId, { includePeriod = false } = {}) => {
+      const normalizePeriodValue = (value) => {
+        const text = String(value ?? "").trim();
+        if (!text || /^null\.?$/i.test(text)) {
+          return null;
+        }
+        return text;
+      };
+      const normalizedReportTemplateId = String(reportTemplateId ?? "").trim();
+      const method = String(selectedReport?.method ?? "").trim().toUpperCase();
+      const roleNames = method === "HAND" ? getAuthRoleNamesFromJwt() : [];
+      const payload = {
+        reportId: normalizedReportTemplateId || null,
+        claimOrganizationId: null,
+        roleNames
+      };
+      if (includePeriod) {
+        payload.startReport = normalizePeriodValue(
+          reportTemplateSettingsDraft?.startReport ??
+            reportTemplateSettingsInitial?.startReport ??
+            selectedReport?.startReport ??
+            selectedReport?.start_report
+        );
+        payload.endReport = normalizePeriodValue(
+          reportTemplateSettingsDraft?.endReport ??
+            reportTemplateSettingsInitial?.endReport ??
+            selectedReport?.endReport ??
+            selectedReport?.end_report
+        );
+      }
+      return payload;
+    },
+    [getAuthRoleNamesFromJwt, reportTemplateSettingsDraft, reportTemplateSettingsInitial, selectedReport]
+  );
   const reportSqlSourceText = isReportSqlEditMode ? reportSqlDraft : reportSqlText;
   const reportSqlFontSizePx = REPORT_SQL_BASE_FONT_SIZE_PX * reportSqlZoom;
   const reportSqlLineHeightPx = REPORT_SQL_EDITOR_LINE_HEIGHT_PX * reportSqlZoom;
@@ -3350,7 +3447,8 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
       body: JSON.stringify(
         toCamelApiPayload({
           reportTemplateId,
-          limit: REPORT_PREVIEW_MAX_RECORDS
+          limit: REPORT_PREVIEW_MAX_RECORDS,
+          ...buildReportExecutionPayload(reportTemplateId, { includePeriod: true })
         })
       )
     });
@@ -3363,7 +3461,8 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
         body: JSON.stringify(
           toCamelApiPayload({
             reportTemplateId,
-            limit: REPORT_PREVIEW_MAX_RECORDS
+            limit: REPORT_PREVIEW_MAX_RECORDS,
+            ...buildReportExecutionPayload(reportTemplateId, { includePeriod: true })
           })
         )
       });
@@ -3643,7 +3742,7 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
       }
 
       try {
-        const response = await fetch(`${API_BASE_URL}/api/relation/${selectedEmployeeIdForRelations}`, {
+        const response = await fetch(`${ADMIN_API_BASE_URL}/relation/${selectedEmployeeIdForRelations}`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
@@ -4161,10 +4260,10 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
   }));
 
   const exportApiUrl = isEmployeesPage
-    ? `${API_BASE_URL}/api/employees/export`
+    ? `${ADMIN_API_BASE_URL}/employees/export`
     : isOrganizationsPage
-      ? `${API_BASE_URL}/api/organizations/export`
-      : `${API_BASE_URL}/api/relations/export`;
+      ? `${ADMIN_API_BASE_URL}/organizations/export`
+      : `${ADMIN_API_BASE_URL}/relations/export`;
 
   const exportFallbackFileName = isEmployeesPage
     ? "employees-export.xlsx"
@@ -4635,7 +4734,8 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
       },
       body: JSON.stringify(
         toCamelApiPayload({
-          reportTemplateId
+          reportTemplateId,
+          ...buildReportExecutionPayload(reportTemplateId, { includePeriod: true })
         })
       )
     });
@@ -4647,7 +4747,8 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
         },
         body: JSON.stringify(
           toCamelApiPayload({
-            reportTemplateId
+            reportTemplateId,
+            ...buildReportExecutionPayload(reportTemplateId, { includePeriod: true })
           })
         )
       });
@@ -4770,7 +4871,8 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
         body: JSON.stringify(
           toCamelApiPayload({
             sqlQuery: normalizedSql,
-            reportTemplateId
+            reportTemplateId,
+            ...buildReportExecutionPayload(reportTemplateId)
           })
         )
       });
@@ -4783,7 +4885,8 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
           body: JSON.stringify(
             toCamelApiPayload({
               sqlQuery: normalizedSql,
-              reportTemplateId
+              reportTemplateId,
+              ...buildReportExecutionPayload(reportTemplateId)
             })
           )
         });
@@ -4876,7 +4979,8 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
           toCamelApiPayload({
               reportTemplateId,
               limit: REPORT_SQL_RESULTS_PAGE_SIZE,
-              offset: pageToLoad
+              offset: pageToLoad,
+              ...buildReportExecutionPayload(reportTemplateId)
           })
         )
       });
@@ -4890,7 +4994,8 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
             toCamelApiPayload({
                 reportTemplateId,
                 limit: REPORT_SQL_RESULTS_PAGE_SIZE,
-                offset: pageToLoad
+                offset: pageToLoad,
+                ...buildReportExecutionPayload(reportTemplateId)
             })
           )
         });
@@ -6799,26 +6904,28 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     }
 
     try {
-      let response = await fetch(`${API_BASE_URL}/api/report-template/${reportTemplateId}/sql`, {
+      let response = await fetch(`${ADMIN_API_BASE_URL}/report-template/${reportTemplateId}/sql`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json"
         },
         body: JSON.stringify(
           toCamelApiPayload({
-            sqlQuery: normalizedSql
+            sqlQuery: normalizedSql,
+            ...buildReportExecutionPayload(reportTemplateId)
           })
         )
       });
       if (response.status === 404) {
-        response = await fetch(`${API_BASE_URL}/api/report-templates/${reportTemplateId}/sql`, {
+        response = await fetch(`${ADMIN_API_BASE_URL}/report-templates/${reportTemplateId}/sql`, {
           method: "PATCH",
           headers: {
             "Content-Type": "application/json"
           },
           body: JSON.stringify(
             toCamelApiPayload({
-              sqlQuery: normalizedSql
+              sqlQuery: normalizedSql,
+              ...buildReportExecutionPayload(reportTemplateId)
             })
           )
         });
@@ -6994,7 +7101,7 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
 
     try {
       const response = await fetch(
-        isCreateMode ? `${API_BASE_URL}/api/employee` : `${API_BASE_URL}/api/employee/${employeeId}`,
+        isCreateMode ? `${ADMIN_API_BASE_URL}/employee` : `${ADMIN_API_BASE_URL}/employee/${employeeId}`,
         {
           method: isCreateMode ? "POST" : "PATCH",
           headers: {
@@ -7726,8 +7833,8 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     try {
       const isEditMode = Boolean(editingEmployeePositionId);
       const endpoint = isEditMode
-        ? `${API_BASE_URL}/api/employee-position/${editingEmployeePositionId}`
-        : `${API_BASE_URL}/api/employee-position`;
+        ? `${ADMIN_API_BASE_URL}/employee-position/${editingEmployeePositionId}`
+        : `${ADMIN_API_BASE_URL}/employee-position`;
       const response = await fetch(endpoint, {
         method: isEditMode ? "PATCH" : "POST",
         headers: {
@@ -8001,8 +8108,8 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     try {
       const isEditMode = Boolean(editingEmployeeRelationId);
       const endpoint = isEditMode
-        ? `${API_BASE_URL}/api/relation/${editingEmployeeRelationId}`
-        : `${API_BASE_URL}/api/relation`;
+        ? `${ADMIN_API_BASE_URL}/relation/${editingEmployeeRelationId}`
+        : `${ADMIN_API_BASE_URL}/relation`;
       const response = await fetch(endpoint, {
         method: isEditMode ? "PATCH" : "POST",
         headers: {
@@ -9014,7 +9121,7 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/relation/${pendingRelationDelete.relationId}`, {
+      const response = await fetch(`${ADMIN_API_BASE_URL}/relation/${pendingRelationDelete.relationId}`, {
         method: "DELETE"
       });
       const data = await response.json();
@@ -9045,7 +9152,7 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
 
     try {
       const response = await fetch(
-        `${API_BASE_URL}/api/employee-position/${pendingPositionDelete.employeeOrganId}`,
+        `${ADMIN_API_BASE_URL}/employee-position/${pendingPositionDelete.employeeOrganId}`,
         { method: "DELETE" }
       );
       const data = await response.json();
@@ -9089,7 +9196,7 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     setPendingEmployeeDelete(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/employee/${deleteRequest.employeeId}`, {
+      const response = await fetch(`${ADMIN_API_BASE_URL}/employee/${deleteRequest.employeeId}`, {
         method: "DELETE"
       });
       const data = await response.json();
