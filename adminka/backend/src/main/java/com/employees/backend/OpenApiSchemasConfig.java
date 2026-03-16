@@ -60,6 +60,10 @@ public class OpenApiSchemasConfig {
             setJsonRequest(openApi, "/api/organizations/export", PathItem.HttpMethod.POST, "application/json", "OrganizationsExportRequest");
             setBinaryResponse(openApi, "/api/organizations/export", PathItem.HttpMethod.POST);
 
+            setJsonResponse(openApi, "/api/report-templates", PathItem.HttpMethod.GET, "MethodHintResponse");
+            setJsonRequest(openApi, "/api/report-templates", PathItem.HttpMethod.POST, "application/json", "ReportTemplatesQueryRequest");
+            setJsonResponse(openApi, "/api/report-templates", PathItem.HttpMethod.POST, "ReportTemplatesQueryResponse");
+
             setJsonRequest(openApi, "/api/relation/{employeeId}", PathItem.HttpMethod.POST, "application/json", "EmployeeRelationsQueryRequest");
             setJsonResponse(openApi, "/api/relation/{employeeId}", PathItem.HttpMethod.POST, "EmployeeRelationsResponse");
 
@@ -507,6 +511,51 @@ public class OpenApiSchemasConfig {
                 Map.entry("defaultFlag", new StringSchema()),
                 Map.entry("employeeName", new StringSchema())
             )
+        ));
+
+        schemas.putIfAbsent("ReportTemplateItem", objectSchema(
+            Map.ofEntries(
+                Map.entry("reportTemplateId", new StringSchema()),
+                Map.entry("codeReport", new StringSchema()),
+                Map.entry("name", new StringSchema()),
+                Map.entry("outputFileName", new StringSchema()),
+                Map.entry("version", new StringSchema()),
+                Map.entry("status", new StringSchema()),
+                Map.entry("method", new StringSchema()),
+                Map.entry("numberDays", new IntegerSchema()),
+                Map.entry("sqlQuery", new StringSchema()),
+                Map.entry("reportInfo", new Schema<>())
+            ),
+            "codeReport"
+        ));
+
+        schemas.putIfAbsent("ReportTemplatesQueryRequest", objectSchema(
+            Map.ofEntries(
+                Map.entry("limit", new IntegerSchema()),
+                Map.entry("offset", new IntegerSchema()),
+                Map.entry("sorts", refArray("SortRule")),
+                Map.entry("sortField", new StringSchema()),
+                Map.entry("sortDirection", new StringSchema()._enum(java.util.List.of("ASC", "DESC"))),
+                Map.entry("codeReport", new StringSchema()),
+                Map.entry("name", new StringSchema()),
+                Map.entry("outputFileName", new StringSchema()),
+                Map.entry("version", new StringSchema()),
+                Map.entry("status", new StringSchema()),
+                Map.entry("method", new StringSchema())
+            )
+        ));
+
+        schemas.putIfAbsent("ReportTemplatesQueryResponse", objectSchema(
+            Map.of(
+                "ok", new BooleanSchema(),
+                "items", refArray("ReportTemplateItem"),
+                "count", new IntegerSchema(),
+                "total_count", new IntegerSchema(),
+                "limit", new IntegerSchema(),
+                "offset", new IntegerSchema(),
+                "sorts", refArray("SortRule")
+            ),
+            "ok", "items", "count", "total_count"
         ));
 
         schemas.putIfAbsent("EmployeePositionMutationRequest", objectSchema(

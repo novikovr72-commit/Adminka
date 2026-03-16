@@ -1,5 +1,6 @@
 package com.employees.backend;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,7 +17,12 @@ class ApiControllerEmployeePositionBossSmokeTest {
     @Test
     void createEmployeePositionSavesBossEmployeeIdIntoParentId() {
         CapturingJdbcTemplate jdbc = new CapturingJdbcTemplate();
-        ApiController controller = new ApiController(jdbc, "backend/logs");
+        ApiController controller = new ApiController(
+            jdbc,
+            new ObjectMapper(),
+            "backend/logs",
+            "http://localhost:5175"
+        );
 
         String employeeId = "11111111-1111-4111-8111-111111111111";
         String organUnitId = "22222222-2222-4222-8222-222222222222";
@@ -39,7 +45,12 @@ class ApiControllerEmployeePositionBossSmokeTest {
     @Test
     void updateEmployeePositionSavesBossEmployeeIdIntoParentId() {
         CapturingJdbcTemplate jdbc = new CapturingJdbcTemplate();
-        ApiController controller = new ApiController(jdbc, "backend/logs");
+        ApiController controller = new ApiController(
+            jdbc,
+            new ObjectMapper(),
+            "backend/logs",
+            "http://localhost:5175"
+        );
 
         String employeeOrganId = "66666666-6666-4666-8666-666666666666";
         String employeeId = "11111111-1111-4111-8111-111111111111";

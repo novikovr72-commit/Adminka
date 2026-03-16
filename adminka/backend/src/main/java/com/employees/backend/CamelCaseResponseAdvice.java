@@ -32,7 +32,14 @@ public class CamelCaseResponseAdvice implements ResponseBodyAdvice<Object> {
         ServerHttpResponse response
     ) {
         String path = request.getURI().getPath();
-        if ("/api/list_employees".equals(path) || path.startsWith("/api/relation")) {
+        boolean reportTemplatesPath = path != null && path.endsWith("/report-templates");
+        boolean reportTemplatePath = path != null && path.startsWith("/api/report-template");
+        if (
+            "/api/list_employees".equals(path) ||
+            path.startsWith("/api/relation") ||
+            reportTemplatesPath ||
+            reportTemplatePath
+        ) {
             // For this endpoint, keep strict contract without duplicate snake/camel aliases.
             return body;
         }

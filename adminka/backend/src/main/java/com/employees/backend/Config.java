@@ -38,6 +38,17 @@ public class Config implements WebMvcConfigurer {
         registry.addMapping("/**")
             .allowedMethods("*")
             .allowedHeaders("*")
+            .exposedHeaders(
+                "Content-Disposition",
+                "X-Execution-Ms",
+                "X-Execution-Time",
+                "X-Selected-Rows",
+                "X-Preview-Limit",
+                "X-Query-Execution-Ms",
+                "X-Template-Fill-Ms",
+                "X-Query-Execution-Ns",
+                "X-Template-Fill-Ns"
+            )
             .allowedOrigins("*");
     }
 
