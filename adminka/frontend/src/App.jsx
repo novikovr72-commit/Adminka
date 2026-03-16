@@ -265,6 +265,7 @@ const RELATIONS_PAGE_DEFAULT_SORT_RULES = [{ field: "employeeName", direction: "
 const REPORT_TEMPLATE_DATA_TYPE_OPTIONS = [
   { value: "text", label: "Текст" },
   { value: "number", label: "Число" },
+  { value: "boolean", label: "Булево (true/false)" },
   { value: "date", label: "Дата" },
   { value: "datetime", label: "Дата/время" }
 ];
@@ -279,6 +280,9 @@ const REPORT_TEMPLATE_DATA_FORMAT_OPTIONS = {
     { value: "0.00", label: "С 2 знаками (0.00)" },
     { value: "0.000", label: "С 3 знаками (0.000)" },
     { value: "#,##0.00", label: "Разделитель тысяч (#,##0.00)" }
+  ],
+  boolean: [
+    { value: "", label: "Без формата" }
   ],
   date: [
     { value: "ДД.ММ.ГГГГ", label: "ДД.ММ.ГГГГ" },
@@ -2468,24 +2472,108 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
       authorities.forEach(pushRole);
       return [...roles];
     };
-    const tokenKeys = ["kc_token", "access_token", "token", "keycloakToken"];
+    const getDevFallbackRoles = () => {
+      const defaultDevRoles = ["nl-gsg-claim-master-all"];
+      const isLocalhost =
+        typeof window !== "undefined" &&
+        ["localhost", "127.0.0.1"].includes(String(window.location?.hostname ?? "").toLowerCase());
+      if (!isLocalhost) {
+        return [];
+      }
+      const parseRoleNames = (rawValue) => {
+        const text = String(rawValue ?? "").trim();
+        if (!text) {
+          return [];
+        }
+        try {
+          const parsed = JSON.parse(text);
+          if (Array.isArray(parsed)) {
+            return parsed
+              .map((value) => String(value ?? "").trim())
+              .filter(Boolean);
+          }
+        } catch {
+          // ignore non-JSON value
+        }
+        return text
+          .split(",")
+          .map((value) => String(value ?? "").trim())
+          .filter(Boolean);
+      };
+      for (const storage of [window.localStorage, window.sessionStorage]) {
+        const storedRoles = parseRoleNames(storage?.getItem?.("adminka_mock_role_names"));
+        if (storedRoles.length > 0) {
+          return storedRoles;
+        }
+      }
+      try {
+        window.localStorage?.setItem?.("adminka_mock_role_names", JSON.stringify(defaultDevRoles));
+      } catch {
+        // ignore storage write errors in restricted environments
+      }
+      return defaultDevRoles;
+    };
+    const extractTokenCandidates = (rawValue) => {
+      const text = String(rawValue ?? "").trim();
+      if (!text) {
+        return [];
+      }
+      const candidates = new Set();
+      if (text.includes(".") && text.split(".").length >= 2) {
+        candidates.add(text);
+      }
+      try {
+        const parsed = JSON.parse(text);
+        const fromJson = [
+          parsed?.access_token,
+          parsed?.id_token,
+          parsed?.token,
+          parsed?.kc_token
+        ];
+        fromJson.forEach((value) => {
+          const tokenText = String(value ?? "").trim();
+          if (tokenText && tokenText.includes(".")) {
+            candidates.add(tokenText);
+          }
+        });
+      } catch {
+        // ignore non-JSON value
+      }
+      return [...candidates];
+    };
+    const tokenKeys = ["kc_token", "access_token", "token", "keycloakToken", "id_token"];
     for (const storage of [window.localStorage, window.sessionStorage]) {
       for (const key of tokenKeys) {
-        const token = storage?.getItem?.(key);
-        if (!token) {
-          continue;
+        const value = storage?.getItem?.(key);
+        for (const token of extractTokenCandidates(value)) {
+          const payload = decodeJwtPayload(token);
+          const roles = collectRoles(payload);
+          if (roles.length > 0) {
+            return roles;
+          }
         }
-        const payload = decodeJwtPayload(token);
-        const roles = collectRoles(payload);
-        if (roles.length > 0) {
-          return roles;
+      }
+      if (storage && typeof storage.length === "number") {
+        for (let index = 0; index < storage.length; index += 1) {
+          const key = storage.key(index);
+          if (!key || (!key.startsWith("oidc.user:") && !key.toLowerCase().includes("keycloak"))) {
+            continue;
+          }
+          const value = storage.getItem(key);
+          for (const token of extractTokenCandidates(value)) {
+            const payload = decodeJwtPayload(token);
+            const roles = collectRoles(payload);
+            if (roles.length > 0) {
+              return roles;
+            }
+          }
         }
       }
     }
-    return [];
+    return getDevFallbackRoles();
   }, []);
   const buildReportExecutionPayload = useCallback(
-    (reportTemplateId, { includePeriod = false } = {}) => {
+    (reportTemplateId, { includePeriod = false, requireRoleNamesForHand = false } = {}) => {
       const normalizePeriodValue = (value) => {
         const text = String(value ?? "").trim();
         if (!text || /^null\.?$/i.test(text)) {
@@ -2494,8 +2582,21 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
         return text;
       };
       const normalizedReportTemplateId = String(reportTemplateId ?? "").trim();
-      const method = String(selectedReport?.method ?? "").trim().toUpperCase();
+      const method = String(
+        selectedReport?.method ??
+          selectedReport?.method_name ??
+          reportMainSettingsDraft?.method ??
+          ""
+      )
+        .trim()
+        .toUpperCase();
       const roleNames = method === "HAND" ? getAuthRoleNamesFromJwt() : [];
+      if (method === "HAND" && roleNames.length === 0) {
+        console.warn("JWT roleNames not found for HAND report execution");
+        if (requireRoleNamesForHand) {
+          throw new Error("Для отчетов с method=HAND параметр roleNames обязателен");
+        }
+      }
       const payload = {
         reportId: normalizedReportTemplateId || null,
         claimOrganizationId: null,
@@ -2517,7 +2618,13 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
       }
       return payload;
     },
-    [getAuthRoleNamesFromJwt, reportTemplateSettingsDraft, reportTemplateSettingsInitial, selectedReport]
+    [
+      getAuthRoleNamesFromJwt,
+      reportMainSettingsDraft,
+      reportTemplateSettingsDraft,
+      reportTemplateSettingsInitial,
+      selectedReport
+    ]
   );
   const reportSqlSourceText = isReportSqlEditMode ? reportSqlDraft : reportSqlText;
   const reportSqlFontSizePx = REPORT_SQL_BASE_FONT_SIZE_PX * reportSqlZoom;
@@ -3448,7 +3555,10 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
         toCamelApiPayload({
           reportTemplateId,
           limit: REPORT_PREVIEW_MAX_RECORDS,
-          ...buildReportExecutionPayload(reportTemplateId, { includePeriod: true })
+          ...buildReportExecutionPayload(reportTemplateId, {
+            includePeriod: true,
+            requireRoleNamesForHand: true
+          })
         })
       )
     });
@@ -3462,7 +3572,10 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
           toCamelApiPayload({
             reportTemplateId,
             limit: REPORT_PREVIEW_MAX_RECORDS,
-            ...buildReportExecutionPayload(reportTemplateId, { includePeriod: true })
+            ...buildReportExecutionPayload(reportTemplateId, {
+              includePeriod: true,
+              requireRoleNamesForHand: true
+            })
           })
         )
       });

@@ -20,6 +20,7 @@ class ApiControllerEmployeePositionBossSmokeTest {
         ApiController controller = new ApiController(
             jdbc,
             new ObjectMapper(),
+            new ReportTemplateExportService(),
             "backend/logs",
             "http://localhost:5175"
         );
@@ -48,6 +49,7 @@ class ApiControllerEmployeePositionBossSmokeTest {
         ApiController controller = new ApiController(
             jdbc,
             new ObjectMapper(),
+            new ReportTemplateExportService(),
             "backend/logs",
             "http://localhost:5175"
         );

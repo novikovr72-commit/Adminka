@@ -119,6 +119,21 @@ public class ApiController {
         Map.entry("position_name", "coalesce(sort_info.position_name, '')"),
         Map.entry("boss_name", "coalesce(sort_info.boss_name, '')")
     );
+    private static final Map<String, String> EMPLOYEE_EXPORT_SORT_SQL = Map.ofEntries(
+        Map.entry("full_name", "e.full_name"),
+        Map.entry("surname", "e.surname"),
+        Map.entry("first_name", "e.first_name"),
+        Map.entry("middle_name", "e.middle_name"),
+        Map.entry("email", "e.email"),
+        Map.entry("personal_number", "e.personal_number"),
+        Map.entry("phone_number", "e.phone_number"),
+        Map.entry("sap_id", "e.sap_id"),
+        Map.entry("status", "e.status"),
+        Map.entry("organ_name", "coalesce(export_info.organ_name, '')"),
+        Map.entry("depart_name", "coalesce(export_info.depart_name, '')"),
+        Map.entry("position_name", "coalesce(export_info.position_name, '')"),
+        Map.entry("boss_name", "coalesce(export_info.boss_name, '')")
+    );
     private static final Set<String> ORG_SORT_FIELDS = Set.of(
         "sap_id", "name", "sh_name", "inn", "kpp", "ogrn", "okpo", "country_name", "address", "sign_resident"
     );
@@ -282,17 +297,20 @@ public class ApiController {
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    private final ReportTemplateExportService reportTemplateExportService;
     private final Path logsDir;
     private final String frontendBaseUrl;
 
     public ApiController(
         JdbcTemplate jdbcTemplate,
         ObjectMapper objectMapper,
+        ReportTemplateExportService reportTemplateExportService,
         @Value("${app.logs-dir:backend/logs}") String logsDir,
         @Value("${app.frontend-base-url:http://localhost:5175}") String frontendBaseUrl
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
+        this.reportTemplateExportService = reportTemplateExportService;
         this.logsDir = Path.of(logsDir).toAbsolutePath().normalize();
         this.frontendBaseUrl = StringUtils.trimTrailingCharacter(
             StringUtils.trimWhitespace(frontendBaseUrl == null ? "" : frontendBaseUrl),
@@ -1058,7 +1076,7 @@ public class ApiController {
         }
 
         String whereSql = "where " + String.join(" and ", where);
-        String orderBy = buildEmployeeOrderBy(sorts);
+        String orderBy = buildEmployeeExportOrderBy(sorts);
         String selectSql = buildSelectSql(columnsResult.columns());
 
         String sql = """
@@ -2638,14 +2656,11 @@ public class ApiController {
     public ResponseEntity<?> executeReportTemplate(
         @RequestBody(required = false) Map<String, Object> rawBody
     ) {
-        Map<String, Object> body = normalizeRequestBody(rawBody);
-        boolean preview = toBooleanOrDefault(body.get("preview"), false);
-        if (preview && !body.containsKey("limit")) {
-            LinkedHashMap<String, Object> previewBody = new LinkedHashMap<>(body);
-            previewBody.put("limit", 50);
-            return reportTemplateExcelPreview(previewBody);
-        }
-        return preview ? reportTemplateExcelPreview(body) : reportTemplateExcelExport(body);
+        return reportTemplateExportService.executeReportTemplate(
+            rawBody,
+            this::reportTemplateExcelPreviewInternal,
+            this::reportTemplateExcelExportInternal
+        );
     }
 
     @PostMapping("/report-templates/execute")
@@ -2658,6 +2673,15 @@ public class ApiController {
     @PostMapping("/report-template/excel-preview")
     public ResponseEntity<?> reportTemplateExcelPreview(
         @RequestBody(required = false) Map<String, Object> rawBody
+    ) {
+        return reportTemplateExportService.reportTemplateExcelPreview(
+            rawBody,
+            this::reportTemplateExcelPreviewInternal
+        );
+    }
+
+    private ResponseEntity<?> reportTemplateExcelPreviewInternal(
+        Map<String, Object> rawBody
     ) {
         Map<String, Object> body = normalizeRequestBody(rawBody);
         String reportTemplateId = normalizeText(body.get("reportTemplateId"));
@@ -2790,6 +2814,15 @@ public class ApiController {
     @PostMapping("/report-template/excel")
     public ResponseEntity<?> reportTemplateExcelExport(
         @RequestBody(required = false) Map<String, Object> rawBody
+    ) {
+        return reportTemplateExportService.reportTemplateExcelExport(
+            rawBody,
+            this::reportTemplateExcelExportInternal
+        );
+    }
+
+    private ResponseEntity<?> reportTemplateExcelExportInternal(
+        Map<String, Object> rawBody
     ) {
         Map<String, Object> body = normalizeRequestBody(rawBody);
         String reportTemplateId = normalizeText(body.get("reportTemplateId"));
@@ -4775,6 +4808,18 @@ public class ApiController {
         return String.join(", ", chunks);
     }
 
+    private String buildEmployeeExportOrderBy(List<SortRule> sorts) {
+        List<String> chunks = new ArrayList<>();
+        for (SortRule sort : sorts) {
+            String sortExpr = EMPLOYEE_EXPORT_SORT_SQL.get(sort.field());
+            if (EMPLOYEE_TEXT_SORT_FIELDS.contains(sort.field())) {
+                sortExpr = sortExpr + " collate \"C\"";
+            }
+            chunks.add(sortExpr + " " + sort.direction() + " nulls last");
+        }
+        return String.join(", ", chunks);
+    }
+
     private String buildOrganizationOrderBy(List<SortRule> sorts) {
         List<String> chunks = new ArrayList<>();
         for (SortRule sort : sorts) {
@@ -5432,7 +5477,21 @@ public class ApiController {
                         rowQueryNanos += readValueNanos;
                         Cell cell = row.createCell(columnIndex);
 
-                        String textValue = writeValueToCell(cell, value);
+                        String textValue = writeValueToCell(cell, value, field.type());
+                        if (isBooleanFieldType(field.type())) {
+                            String normalizedBooleanText = String.valueOf(textValue).trim().toLowerCase(Locale.ROOT);
+                            if ("true".equals(normalizedBooleanText) || "t".equals(normalizedBooleanText) || "1".equals(normalizedBooleanText)) {
+                                textValue = "ДА";
+                                cell.setCellValue(textValue);
+                            } else if (
+                                "false".equals(normalizedBooleanText) ||
+                                "f".equals(normalizedBooleanText) ||
+                                "0".equals(normalizedBooleanText)
+                            ) {
+                                textValue = "НЕТ";
+                                cell.setCellValue(textValue);
+                            }
+                        }
                         CellStyle dataCellStyle = resolveDataCellStyle(
                             workbook,
                             dataDefaultStyle,
@@ -5555,10 +5614,47 @@ public class ApiController {
         return resultSet.getObject(resolvedColumn);
     }
 
-    private String writeValueToCell(Cell cell, Object value) {
+    private boolean isBooleanFieldType(String fieldType) {
+        String normalizedType = normalizeText(fieldType);
+        if (normalizedType == null) {
+            return false;
+        }
+        String lowered = normalizedType.toLowerCase(Locale.ROOT);
+        return
+            "boolean".equals(lowered) ||
+            "bool".equals(lowered) ||
+            "булево".equals(lowered) ||
+            "булево (true/false)".equals(lowered);
+    }
+
+    private String writeValueToCell(Cell cell, Object value, String fieldType) {
         if (value == null) {
             cell.setCellValue("");
             return "";
+        }
+        if (value instanceof Boolean boolValue) {
+            String display = boolValue ? "ДА" : "НЕТ";
+            cell.setCellValue(display);
+            return display;
+        }
+        if (isBooleanFieldType(fieldType)) {
+            if (value instanceof Boolean boolValue) {
+                String display = boolValue ? "ДА" : "НЕТ";
+                cell.setCellValue(display);
+                return display;
+            }
+            String rawText = String.valueOf(value).trim();
+            String lowered = rawText.toLowerCase(Locale.ROOT);
+            if ("true".equals(lowered) || "t".equals(lowered) || "1".equals(lowered)) {
+                cell.setCellValue("ДА");
+                return "ДА";
+            }
+            if ("false".equals(lowered) || "f".equals(lowered) || "0".equals(lowered)) {
+                cell.setCellValue("НЕТ");
+                return "НЕТ";
+            }
+            cell.setCellValue(rawText);
+            return rawText;
         }
         if (value instanceof Number number) {
             cell.setCellValue(number.doubleValue());
