@@ -1,41 +1,44 @@
-package com.employees.backend;
+package com.employees.backend.service;
 
+import com.employees.backend.ReportTemplateExcelFacade;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.function.Function;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 @Service
-public class ReportTemplateExportService {
+public class ReportTemplateExecuteService {
+    private final ReportTemplateExcelFacade excelFacade;
 
-    public ResponseEntity<?> executeReportTemplate(
-        Map<String, Object> rawBody,
-        Function<Map<String, Object>, ResponseEntity<?>> previewHandler,
-        Function<Map<String, Object>, ResponseEntity<?>> exportHandler
-    ) {
+    public ReportTemplateExecuteService(ReportTemplateExcelFacade excelFacade) {
+        this.excelFacade = excelFacade;
+    }
+
+    public ResponseEntity<?> executeReportTemplate(Map<String, Object> rawBody) {
         Map<String, Object> body = normalizeRequestBody(rawBody);
         boolean preview = toBooleanOrDefault(body.get("preview"), false);
         if (preview && !body.containsKey("limit")) {
             LinkedHashMap<String, Object> previewBody = new LinkedHashMap<>(body);
             previewBody.put("limit", 50);
-            return previewHandler.apply(previewBody);
+            return reportTemplateExcelPreviewInternal(previewBody);
         }
-        return preview ? previewHandler.apply(body) : exportHandler.apply(body);
+        return preview ? reportTemplateExcelPreviewInternal(body) : reportTemplateExcelExportInternal(body);
     }
 
-    public ResponseEntity<?> reportTemplateExcelPreview(
-        Map<String, Object> rawBody,
-        Function<Map<String, Object>, ResponseEntity<?>> previewHandler
-    ) {
-        return previewHandler.apply(normalizeRequestBody(rawBody));
+    public ResponseEntity<?> reportTemplateExcelPreview(Map<String, Object> rawBody) {
+        return reportTemplateExcelPreviewInternal(normalizeRequestBody(rawBody));
     }
 
-    public ResponseEntity<?> reportTemplateExcelExport(
-        Map<String, Object> rawBody,
-        Function<Map<String, Object>, ResponseEntity<?>> exportHandler
-    ) {
-        return exportHandler.apply(normalizeRequestBody(rawBody));
+    public ResponseEntity<?> reportTemplateExcelExport(Map<String, Object> rawBody) {
+        return reportTemplateExcelExportInternal(normalizeRequestBody(rawBody));
+    }
+
+    private ResponseEntity<?> reportTemplateExcelPreviewInternal(Map<String, Object> rawBody) {
+        return excelFacade.reportTemplateExcelPreviewDirect(rawBody);
+    }
+
+    private ResponseEntity<?> reportTemplateExcelExportInternal(Map<String, Object> rawBody) {
+        return excelFacade.reportTemplateExcelExportDirect(rawBody);
     }
 
     private Map<String, Object> normalizeRequestBody(Map<String, Object> rawBody) {

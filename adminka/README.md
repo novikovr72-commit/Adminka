@@ -11,6 +11,54 @@ npm run install:all
 npm run dev
 ```
 
+## Стабильный запуск dev (зафиксировано)
+
+Чтобы фронт `5175` и backend `3003` поднимались и контролировались одной командой:
+
+```bash
+npm run dev:fixed:start
+```
+
+Проверка состояния:
+
+```bash
+npm run dev:fixed:status
+```
+
+Перезапуск:
+
+```bash
+npm run dev:fixed:restart
+```
+
+Остановка:
+
+```bash
+npm run dev:fixed:stop
+```
+
+Логи сохраняются в `.run/logs/`:
+- backend: `.run/logs/backend.log`
+- frontend: `.run/logs/frontend.log`
+
+## Архитектурный каркас backend (рефакторинг)
+
+В backend зафиксирована целевая структура слоев:
+
+- `controller` — только HTTP-маршрутизация;
+- `service` — бизнес-правила и orchestration;
+- `repository` — доступ к БД;
+- `dto` / `mapper` / `domain` — модели API и домена.
+
+Текущее состояние миграции:
+
+- доменные endpoint-ы разнесены по отдельным контроллерам (`ReportTemplate`, `Employee`, `Organization`, `Relation`, `PrintFormTemplate`, `SystemLookup`);
+- SQL-операции report-template и print-form-template вынесены в `repository`-слой;
+- `PrintFormTemplate` разделен на HTTP (`PrintFormTemplateController`) + business (`PrintFormTemplateService`) + DAO (`PrintFormTemplateRepository`) + PDF-core (`PrintFormTemplatePdfService`);
+- SQL-поток report-template вынесен в `ReportTemplateSqlCore` + `ReportTemplateSqlService`;
+- Excel-поток report-template вынесен в отдельный core-класс `ReportTemplateExcelCore` и используется через `ReportTemplateExcelFacade` + `ReportTemplateExecuteService`;
+- legacy-нейминг (`Legacy*`) из runtime-цепочек удален.
+
 Maven отдельно устанавливать не нужно: используется `backend/mvnw`.
 Java Runtime (OpenJDK) должен быть установлен через Homebrew.
 

@@ -1,5 +1,6 @@
 package com.employees.backend;
 
+import com.employees.backend.repository.ReportTemplateRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.HttpServletRequest;
@@ -29,7 +30,6 @@ import org.apache.poi.xssf.usermodel.XSSFColor;
 import org.apache.poi.xssf.usermodel.XSSFFont;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.apache.poi.util.Units;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -37,16 +37,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.util.StringUtils;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RequestPart;
-import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.util.UriUtils;
 
@@ -57,12 +47,17 @@ import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
+import java.net.URI;
 import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -73,9 +68,11 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -83,9 +80,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.imageio.ImageIO;
 
-@RestController
-@RequestMapping({"/api/admin", "/api"})
-public class ApiController {
+class ReportTemplateExcelCore {
 
     private static final Set<String> ALLOWED_STATUS = Set.of("ACTIVE", "INACTIVE");
     private static final Pattern NAMED_SQL_PARAM_PATTERN = Pattern.compile("(?<!:):[a-zA-Z_][a-zA-Z0-9_]*");
@@ -135,10 +130,12 @@ public class ApiController {
         Map.entry("boss_name", "coalesce(export_info.boss_name, '')")
     );
     private static final Set<String> ORG_SORT_FIELDS = Set.of(
-        "sap_id", "name", "sh_name", "inn", "kpp", "ogrn", "okpo", "country_name", "address", "sign_resident"
+        "sap_id", "name", "sh_name", "inn", "kpp", "ogrn", "okpo", "country_name", "address", "sign_resident",
+        "organ_unit_type_names"
     );
     private static final Set<String> ORG_TEXT_SORT_FIELDS = Set.of(
-        "sap_id", "name", "sh_name", "inn", "kpp", "ogrn", "okpo", "country_name", "address"
+        "sap_id", "name", "sh_name", "inn", "kpp", "ogrn", "okpo", "country_name", "address",
+        "organ_unit_type_names"
     );
     private static final Set<String> REQUIRED_COLUMNS = Set.of(
         "sap_id", "surname", "first_name", "middle_name", "email", "personal_number", "phone_number"
@@ -166,20 +163,35 @@ public class ApiController {
         "sap_id", "full_name", "surname", "first_name", "middle_name", "email",
         "personal_number", "phone_number", "status", "organ_name", "depart_name", "position_name", "boss_name"
     );
-    private static final Map<String, ColumnMeta> ORG_EXPORT_COLUMNS = Map.of(
-        "sap_id", new ColumnMeta("sap_id", "ou.sap_id"),
-        "name", new ColumnMeta("Наименование", "ou.name"),
-        "sh_name", new ColumnMeta("Краткое наименование", "ou.sh_name"),
-        "inn", new ColumnMeta("ИНН", "ou.inn"),
-        "kpp", new ColumnMeta("КПП", "ou.kpp"),
-        "ogrn", new ColumnMeta("ОГРН", "ou.ogrn"),
-        "okpo", new ColumnMeta("ОКПО", "ou.okpo"),
-        "sign_resident", new ColumnMeta("Резидент", "case when ou.sign_resident = true then 'ДА' else 'НЕТ' end"),
-        "country_name", new ColumnMeta("Страна", "c.name"),
-        "address", new ColumnMeta("Адрес", "addr.full_address")
+    private static final Map<String, ColumnMeta> ORG_EXPORT_COLUMNS = Map.ofEntries(
+        Map.entry("sap_id", new ColumnMeta("sap_id", "ou.sap_id")),
+        Map.entry("name", new ColumnMeta("Наименование", "ou.name")),
+        Map.entry("sh_name", new ColumnMeta("Краткое наименование", "ou.sh_name")),
+        Map.entry(
+            "organ_unit_type_names",
+            new ColumnMeta(
+                "Тип организации",
+                """
+                (
+                  select string_agg(out.name, ', ' order by out.sort_order nulls last, out.name, out.id)
+                  from party.organ_unit_organ_unit_types ouot
+                  join party.organ_unit_type out on out.id = ouot.organ_unit_type_id
+                  where ouot.organ_unit_id = ou.id
+                )
+                """
+            )
+        ),
+        Map.entry("inn", new ColumnMeta("ИНН", "ou.inn")),
+        Map.entry("kpp", new ColumnMeta("КПП", "ou.kpp")),
+        Map.entry("ogrn", new ColumnMeta("ОГРН", "ou.ogrn")),
+        Map.entry("okpo", new ColumnMeta("ОКПО", "ou.okpo")),
+        Map.entry("sign_resident", new ColumnMeta("Резидент", "case when ou.sign_resident = true then 'ДА' else 'НЕТ' end")),
+        Map.entry("country_name", new ColumnMeta("Страна", "c.name")),
+        Map.entry("address", new ColumnMeta("Адрес", "addr.full_address"))
     );
     private static final List<String> ORG_EXPORT_DEFAULT_ORDER = List.of(
-        "sap_id", "name", "sh_name", "inn", "kpp", "ogrn", "okpo", "sign_resident", "country_name", "address"
+        "sap_id", "name", "sh_name", "organ_unit_type_names",
+        "inn", "kpp", "ogrn", "okpo", "sign_resident", "country_name", "address"
     );
     private static final Map<String, ColumnMeta> RELATION_EXPORT_COLUMNS = Map.ofEntries(
         Map.entry("employee_name", new ColumnMeta("ФИО сотрудника", "coalesce(e.full_name, '')")),
@@ -195,17 +207,18 @@ public class ApiController {
     private static final List<String> RELATION_EXPORT_DEFAULT_ORDER = List.of(
         "employee_name", "organ_name", "relation_name", "default_flag", "sales_organ_name", "product_group_name"
     );
-    private static final Map<String, String> ORG_SORT_SQL = Map.of(
-        "sap_id", "ou.sap_id",
-        "name", "ou.name",
-        "sh_name", "ou.sh_name",
-        "inn", "ou.inn",
-        "kpp", "ou.kpp",
-        "ogrn", "ou.ogrn",
-        "okpo", "ou.okpo",
-        "country_name", "c.name",
-        "address", "addr.full_address",
-        "sign_resident", "ou.sign_resident"
+    private static final Map<String, String> ORG_SORT_SQL = Map.ofEntries(
+        Map.entry("sap_id", "ou.sap_id"),
+        Map.entry("name", "ou.name"),
+        Map.entry("sh_name", "ou.sh_name"),
+        Map.entry("inn", "ou.inn"),
+        Map.entry("kpp", "ou.kpp"),
+        Map.entry("ogrn", "ou.ogrn"),
+        Map.entry("okpo", "ou.okpo"),
+        Map.entry("country_name", "c.name"),
+        Map.entry("address", "addr.full_address"),
+        Map.entry("sign_resident", "ou.sign_resident"),
+        Map.entry("organ_unit_type_names", "types.organ_unit_type_names_sort")
     );
     private static final Set<String> RELATION_SORT_FIELDS = Set.of(
         "employee_name", "organ_name", "relation_name", "sales_organ_name", "product_group_name", "default_flag"
@@ -220,21 +233,6 @@ public class ApiController {
         "sales_organ_name", "coalesce(sou.sh_name, '')",
         "product_group_name", "coalesce(pg.name, '')",
         "default_flag", "r.default_flag"
-    );
-    private static final Set<String> REPORT_TEMPLATE_SORT_FIELDS = Set.of(
-        "code_report", "name", "output_file_name", "output_file_type", "version", "status", "method"
-    );
-    private static final Set<String> REPORT_TEMPLATE_TEXT_SORT_FIELDS = Set.of(
-        "code_report", "name", "output_file_name", "output_file_type", "version", "status", "method"
-    );
-    private static final Map<String, String> REPORT_TEMPLATE_SORT_SQL = Map.of(
-        "code_report", "rt.code_report",
-        "name", "rt.name",
-        "output_file_name", "rt.output_file_name",
-        "output_file_type", "rt.output_file_type",
-        "version", "rt.version",
-        "status", "rt.status",
-        "method", "rt.method"
     );
     private static final Map<String, String> EMPLOYEE_FILTER_TITLES = Map.ofEntries(
         Map.entry("full_name", "ФИО"),
@@ -266,17 +264,18 @@ public class ApiController {
         Map.entry("position_name", "Должность"),
         Map.entry("boss_name", "Руководитель")
     );
-    private static final Map<String, String> ORG_FILTER_TITLES = Map.of(
-        "sap_id", "sap_id",
-        "name", "Наименование",
-        "sh_name", "Краткое наименование",
-        "inn", "ИНН",
-        "kpp", "КПП",
-        "ogrn", "ОГРН",
-        "okpo", "ОКПО",
-        "country_name", "Страна",
-        "address", "Адрес",
-        "sign_resident", "Резидент"
+    private static final Map<String, String> ORG_FILTER_TITLES = Map.ofEntries(
+        Map.entry("sap_id", "sap_id"),
+        Map.entry("name", "Наименование"),
+        Map.entry("sh_name", "Краткое наименование"),
+        Map.entry("inn", "ИНН"),
+        Map.entry("kpp", "КПП"),
+        Map.entry("ogrn", "ОГРН"),
+        Map.entry("okpo", "ОКПО"),
+        Map.entry("country_name", "Страна"),
+        Map.entry("address", "Адрес"),
+        Map.entry("sign_resident", "Резидент"),
+        Map.entry("organ_unit_type_names", "Тип организации")
     );
     private static final Map<String, String> RELATION_FILTER_TITLES = Map.ofEntries(
         Map.entry("employee_name", "ФИО сотрудника"),
@@ -296,34 +295,38 @@ public class ApiController {
     );
 
     private final JdbcTemplate jdbcTemplate;
+    private final ReportTemplateRepository reportTemplateRepository;
     private final ObjectMapper objectMapper;
-    private final ReportTemplateExportService reportTemplateExportService;
     private final Path logsDir;
     private final String frontendBaseUrl;
+    private final String dadataFindPartyUrl;
+    private final String dadataApiToken;
 
-    public ApiController(
+    ReportTemplateExcelCore(
         JdbcTemplate jdbcTemplate,
+        ReportTemplateRepository reportTemplateRepository,
         ObjectMapper objectMapper,
-        ReportTemplateExportService reportTemplateExportService,
-        @Value("${app.logs-dir:backend/logs}") String logsDir,
-        @Value("${app.frontend-base-url:http://localhost:5175}") String frontendBaseUrl
+        String logsDir,
+        String frontendBaseUrl,
+        String dadataFindPartyUrl,
+        String dadataApiToken
     ) {
         this.jdbcTemplate = jdbcTemplate;
+        this.reportTemplateRepository = reportTemplateRepository;
         this.objectMapper = objectMapper;
-        this.reportTemplateExportService = reportTemplateExportService;
         this.logsDir = Path.of(logsDir).toAbsolutePath().normalize();
         this.frontendBaseUrl = StringUtils.trimTrailingCharacter(
             StringUtils.trimWhitespace(frontendBaseUrl == null ? "" : frontendBaseUrl),
             '/'
         );
+        this.dadataFindPartyUrl = StringUtils.trimWhitespace(dadataFindPartyUrl == null ? "" : dadataFindPartyUrl);
+        this.dadataApiToken = StringUtils.trimWhitespace(dadataApiToken == null ? "" : dadataApiToken);
     }
 
-    @GetMapping("/health")
     public Map<String, Object> health() {
         return mapOf("ok", true, "message", "Backend employees запущен");
     }
 
-    @GetMapping("/db-health")
     public ResponseEntity<Map<String, Object>> dbHealth() {
         try {
             String dbName = jdbcTemplate.queryForObject("select current_database()", String.class);
@@ -334,12 +337,264 @@ public class ApiController {
         }
     }
 
-    @GetMapping("/list_organizations")
+    public ResponseEntity<Map<String, Object>> dadataFindParty(Map<String, Object> rawBody) {
+        Map<String, Object> body = normalizeRequestBody(rawBody);
+        String query = normalizeText(body.get("query"));
+        if (query == null) {
+            return badRequest("Параметр query обязателен");
+        }
+        if (query.length() > 300) {
+            return badRequest("Длина query не должна превышать 300 символов");
+        }
+        if (dadataApiToken == null || dadataApiToken.isBlank()) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(mapOf(
+                "ok", false,
+                "error", "Не задан app.dadata.api-token"
+            ));
+        }
+        if (dadataFindPartyUrl == null || dadataFindPartyUrl.isBlank()) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(mapOf(
+                "ok", false,
+                "error", "Не задан app.dadata.find-party-url"
+            ));
+        }
+
+        ParseResult countParsed = parsePositiveInteger(body.get("count"), 1, "count");
+        if (countParsed.error() != null) {
+            return badRequest(countParsed.error());
+        }
+        int count = countParsed.value();
+        if (count > 300) {
+            return badRequest("Параметр count не должен быть больше 300");
+        }
+
+        String kpp = normalizeText(body.get("kpp"));
+        String branchTypeRaw = firstDefined(normalizeText(body.get("branchType")), normalizeText(body.get("branch_type")));
+        String typeRaw = normalizeText(body.get("type"));
+        List<String> status = normalizeStringList(body.get("status"));
+
+        String branchType = branchTypeRaw == null ? null : branchTypeRaw.toUpperCase(Locale.ROOT);
+        if (branchType != null && !Set.of("MAIN", "BRANCH").contains(branchType)) {
+            return badRequest("Параметр branchType должен быть MAIN или BRANCH");
+        }
+        String type = typeRaw == null ? null : typeRaw.toUpperCase(Locale.ROOT);
+        if (type != null && !Set.of("LEGAL", "INDIVIDUAL").contains(type)) {
+            return badRequest("Параметр type должен быть LEGAL или INDIVIDUAL");
+        }
+
+        LinkedHashMap<String, Object> payload = new LinkedHashMap<>();
+        payload.put("query", query);
+        payload.put("count", count);
+        if (kpp != null) {
+            payload.put("kpp", kpp);
+        }
+        if (branchType != null) {
+            payload.put("branch_type", branchType);
+        }
+        if (type != null) {
+            payload.put("type", type);
+        }
+        if (!status.isEmpty()) {
+            payload.put("status", status);
+        }
+
+        try {
+            String payloadJson = objectMapper.writeValueAsString(payload);
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(dadataFindPartyUrl))
+                .timeout(Duration.ofSeconds(20))
+                .header("Content-Type", "application/json")
+                .header("Accept", "application/json")
+                .header("Authorization", "Token " + dadataApiToken)
+                .POST(HttpRequest.BodyPublishers.ofString(payloadJson, StandardCharsets.UTF_8))
+                .build();
+
+            HttpResponse<String> response = HttpClient.newHttpClient().send(
+                request,
+                HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)
+            );
+
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(mapOf(
+                    "ok", false,
+                    "error", "DaData вернул ошибку HTTP " + response.statusCode(),
+                    "providerResponse", response.body()
+                ));
+            }
+
+            Map<String, Object> responseBody = objectMapper.readValue(
+                response.body(),
+                new TypeReference<Map<String, Object>>() {}
+            );
+            List<Map<String, Object>> suggestions = extractDadataSuggestions(responseBody.get("suggestions"));
+            Map<String, Object> item = suggestions.isEmpty()
+                ? new LinkedHashMap<>()
+                : toDadataOrganizationItem(suggestions.get(0));
+
+            return ResponseEntity.ok(mapOf(
+                "ok", true,
+                "item", item,
+                "items", suggestions.stream().map(this::toDadataOrganizationItem).toList(),
+                "count", suggestions.size()
+            ));
+        } catch (InterruptedException interruptedException) {
+            Thread.currentThread().interrupt();
+            return serverError(interruptedException, "Ошибка запроса в DaData");
+        } catch (Exception exception) {
+            return serverError(exception, "Ошибка запроса в DaData");
+        }
+    }
+
+    public ResponseEntity<Map<String, Object>> refreshOrganizationDadata(
+        String organUnitIdRaw
+    ) {
+        String organUnitId = normalizeText(organUnitIdRaw);
+        if (organUnitId == null) {
+            return badRequest("Параметр organUnitId обязателен");
+        }
+        if (!organUnitId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
+            return badRequest("Параметр organUnitId должен быть UUID");
+        }
+        if (dadataApiToken == null || dadataApiToken.isBlank()) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(mapOf(
+                "ok", false,
+                "error", "Не задан app.dadata.api-token"
+            ));
+        }
+        if (dadataFindPartyUrl == null || dadataFindPartyUrl.isBlank()) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(mapOf(
+                "ok", false,
+                "error", "Не задан app.dadata.find-party-url"
+            ));
+        }
+
+        try {
+            List<Map<String, Object>> organizationRows = jdbcTemplate.queryForList(
+                """
+                select
+                  ou.id::text as organ_unit_id,
+                  ou.inn,
+                  ou.ogrn,
+                  ou.kpp
+                from party.organ_unit ou
+                where ou.id = ?::uuid
+                  and ou.deleted = false
+                limit 1
+                """,
+                organUnitId
+            );
+            if (organizationRows.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf(
+                    "ok", false,
+                    "error", "Организация не найдена"
+                ));
+            }
+
+            Map<String, Object> organization = organizationRows.get(0);
+            String inn = normalizeText(organization.get("inn"));
+            String ogrn = normalizeText(organization.get("ogrn"));
+            String kpp = normalizeText(organization.get("kpp"));
+            String query = null;
+            if (ogrn != null) {
+                query = ogrn;
+            } else if (inn != null && kpp != null) {
+                query = inn + "/" + kpp;
+            } else if (inn != null) {
+                query = inn;
+            }
+            if (query == null) {
+                return badRequest("Для запроса в DaData у организации должен быть заполнен ИНН или ОГРН");
+            }
+
+            List<LinkedHashMap<String, Object>> requestAttempts = new ArrayList<>();
+            boolean hasInnKppQuery = query.contains("/");
+            String innOnlyQuery = inn;
+
+            if (!hasInnKppQuery) {
+                LinkedHashMap<String, Object> strictPayload = new LinkedHashMap<>();
+                strictPayload.put("query", query);
+                strictPayload.put("count", 1);
+                if (kpp != null) {
+                    strictPayload.put("kpp", kpp);
+                }
+                strictPayload.put("branch_type", "MAIN");
+                strictPayload.put("type", "LEGAL");
+                requestAttempts.add(strictPayload);
+
+                LinkedHashMap<String, Object> withoutKppPayload = new LinkedHashMap<>();
+                withoutKppPayload.put("query", query);
+                withoutKppPayload.put("count", 1);
+                withoutKppPayload.put("branch_type", "MAIN");
+                withoutKppPayload.put("type", "LEGAL");
+                requestAttempts.add(withoutKppPayload);
+            }
+
+            LinkedHashMap<String, Object> withoutBranchPayload = new LinkedHashMap<>();
+            withoutBranchPayload.put("query", query);
+            withoutBranchPayload.put("count", 1);
+            withoutBranchPayload.put("type", "LEGAL");
+            requestAttempts.add(withoutBranchPayload);
+
+            LinkedHashMap<String, Object> minimalPayload = new LinkedHashMap<>();
+            minimalPayload.put("query", query);
+            minimalPayload.put("count", 1);
+            requestAttempts.add(minimalPayload);
+            if (hasInnKppQuery && innOnlyQuery != null) {
+                LinkedHashMap<String, Object> innOnlyPayload = new LinkedHashMap<>();
+                innOnlyPayload.put("query", innOnlyQuery);
+                innOnlyPayload.put("count", 1);
+                requestAttempts.add(innOnlyPayload);
+            }
+
+            List<Map<String, Object>> suggestions = List.of();
+            for (LinkedHashMap<String, Object> payload : requestAttempts) {
+                Map<String, Object> responseBody = requestDadataFindParty(payload);
+                suggestions = extractDadataSuggestions(responseBody.get("suggestions"));
+                if (!suggestions.isEmpty()) {
+                    break;
+                }
+            }
+            if (suggestions.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf(
+                    "ok", false,
+                    "error", "DaData не вернул данные по организации"
+                ));
+            }
+
+            Map<String, Object> firstSuggestion = suggestions.get(0);
+            String dataInfoJson = objectMapper.writeValueAsString(firstSuggestion);
+
+            jdbcTemplate.update(
+                """
+                update party.organ_unit
+                set
+                  data_info = ?::jsonb,
+                  updated_at = now()
+                where id = ?::uuid
+                  and deleted = false
+                """,
+                dataInfoJson,
+                organUnitId
+            );
+
+            return ResponseEntity.ok(mapOf(
+                "ok", true,
+                "dataInfo", firstSuggestion,
+                "item", toDadataOrganizationItem(firstSuggestion)
+            ));
+        } catch (InterruptedException interruptedException) {
+            Thread.currentThread().interrupt();
+            return serverError(interruptedException, "Ошибка запроса в DaData");
+        } catch (Exception exception) {
+            return serverError(exception, "Ошибка запроса в DaData");
+        }
+    }
+
     public ResponseEntity<Map<String, Object>> listOrganizations(
-        @RequestParam(name = "show_short_code", required = false) String showShortCodeSnakeRaw,
-        @RequestParam(name = "showShortCode", required = false) String showShortCodeCamelRaw,
-        @RequestParam(name = "organ_name", required = false) String organNameSnakeRaw,
-        @RequestParam(name = "organName", required = false) String organNameCamelRaw
+        String showShortCodeSnakeRaw,
+        String showShortCodeCamelRaw,
+        String organNameSnakeRaw,
+        String organNameCamelRaw
     ) {
         String showShortCodeRaw = firstDefined(showShortCodeSnakeRaw, showShortCodeCamelRaw);
         String showShortCodeNormalized = normalizeText(showShortCodeRaw);
@@ -482,10 +737,77 @@ public class ApiController {
         }
     }
 
-    @GetMapping("/list_relations")
+    public ResponseEntity<Map<String, Object>> listOrganizationUnitTypes(
+        String nameRaw
+    ) {
+        String name = normalizeText(nameRaw);
+        List<Object> params = new ArrayList<>();
+        List<String> where = new ArrayList<>();
+        where.add("out.deleted = false");
+        if (name != null) {
+            for (String token : splitSearchTokens(name)) {
+                where.add("out.name ILIKE ?");
+                params.add("%" + token + "%");
+            }
+        }
+        String sql = """
+            select
+              out.id::text as id,
+              out.code as code,
+              out.sort_order as sort_order,
+              out.name as name
+            from party.organ_unit_type out
+            where %s
+            order by out.sort_order nulls last, out.name, out.id
+            """.formatted(String.join(" and ", where));
+        try {
+            List<Map<String, Object>> items = jdbcTemplate.queryForList(sql, params.toArray());
+            return ResponseEntity.ok(mapOf(
+                "ok", true,
+                "items", items,
+                "count", items.size()
+            ));
+        } catch (Exception exception) {
+            return serverError(exception, "Внутренняя ошибка списка типов организаций");
+        }
+    }
+
+    public ResponseEntity<Map<String, Object>> listCountries(
+        String nameRaw
+    ) {
+        String name = normalizeText(nameRaw);
+        List<Object> params = new ArrayList<>();
+        List<String> where = new ArrayList<>();
+        where.add("c.deleted = false");
+        if (name != null) {
+            for (String token : splitSearchTokens(name)) {
+                where.add("c.name ILIKE ?");
+                params.add("%" + token + "%");
+            }
+        }
+        String sql = """
+            select
+              c.id::text as id,
+              c.name as name
+            from nsi.country c
+            where %s
+            order by c.name, c.id
+            """.formatted(String.join(" and ", where));
+        try {
+            List<Map<String, Object>> items = jdbcTemplate.queryForList(sql, params.toArray());
+            return ResponseEntity.ok(mapOf(
+                "ok", true,
+                "items", items,
+                "count", items.size()
+            ));
+        } catch (Exception exception) {
+            return serverError(exception, "Внутренняя ошибка списка стран");
+        }
+    }
+
     public ResponseEntity<Map<String, Object>> listRelations(
-        @RequestParam(name = "relation_name", required = false) String relationNameSnakeRaw,
-        @RequestParam(name = "relationName", required = false) String relationNameCamelRaw
+        String relationNameSnakeRaw,
+        String relationNameCamelRaw
     ) {
         String relationName = normalizeText(firstDefined(relationNameSnakeRaw, relationNameCamelRaw));
         List<Object> params = new ArrayList<>();
@@ -518,10 +840,9 @@ public class ApiController {
         }
     }
 
-    @GetMapping("/list_product_groups")
     public ResponseEntity<Map<String, Object>> listProductGroups(
-        @RequestParam(name = "product_group_name", required = false) String productGroupNameSnakeRaw,
-        @RequestParam(name = "productGroupName", required = false) String productGroupNameCamelRaw
+        String productGroupNameSnakeRaw,
+        String productGroupNameCamelRaw
     ) {
         String productGroupName = normalizeText(firstDefined(productGroupNameSnakeRaw, productGroupNameCamelRaw));
         List<Object> params = new ArrayList<>();
@@ -554,10 +875,9 @@ public class ApiController {
         }
     }
 
-    @GetMapping("/list_positions")
     public ResponseEntity<Map<String, Object>> listPositions(
-        @RequestParam(name = "position_name", required = false) String positionNameSnakeRaw,
-        @RequestParam(name = "positionName", required = false) String positionNameCamelRaw
+        String positionNameSnakeRaw,
+        String positionNameCamelRaw
     ) {
         String positionName = normalizeText(firstDefined(positionNameSnakeRaw, positionNameCamelRaw));
         List<Object> params = new ArrayList<>();
@@ -591,11 +911,10 @@ public class ApiController {
         }
     }
 
-    @GetMapping("/list_employees")
     public ResponseEntity<Map<String, Object>> listEmployees(
-        @RequestParam(name = "departUnitId", required = false) String departUnitId,
-        @RequestParam(name = "employeeId", required = false) String employeeId,
-        @RequestParam(name = "employeeName", required = false) String employeeName
+        String departUnitId,
+        String employeeId,
+        String employeeName
     ) {
         departUnitId = normalizeText(departUnitId);
         employeeId = normalizeText(employeeId);
@@ -660,14 +979,12 @@ public class ApiController {
         }
     }
 
-    @GetMapping("/employees")
     public ResponseEntity<Map<String, Object>> employeesGet() {
         return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
             .body(mapOf("ok", false, "error", "Используйте POST /api/employees с JSON body"));
     }
 
-    @PostMapping("/employees")
-    public ResponseEntity<Map<String, Object>> employeesPost(@RequestBody(required = false) Map<String, Object> rawBody) {
+    public ResponseEntity<Map<String, Object>> employeesPost(Map<String, Object> rawBody) {
         Map<String, Object> body = normalizeRequestBody(rawBody);
         String arrayParamError = hasArrayValue(body, Set.of("sorts"));
         if (arrayParamError != null) {
@@ -923,10 +1240,9 @@ public class ApiController {
         }
     }
 
-    @PostMapping("/employees/export")
-    public ResponseEntity<?> employeesExport(@RequestBody(required = false) Map<String, Object> rawBody) {
+    public ResponseEntity<?> employeesExport(Map<String, Object> rawBody) {
         Map<String, Object> body = normalizeRequestBody(rawBody);
-        String arrayParamError = hasArrayValue(body, Set.of("sorts", "columns"));
+        String arrayParamError = hasArrayValue(body, Set.of("sorts", "columns", "organUnitTypeNames", "organTypeNames"));
         if (arrayParamError != null) {
             return badRequest("Параметр " + arrayParamError + " должен содержать одно значение");
         }
@@ -1188,11 +1504,10 @@ public class ApiController {
         }
     }
 
-    @PostMapping("/employees/import")
     public ResponseEntity<Map<String, Object>> employeesImport(
-        @RequestPart("file") MultipartFile file,
-        @RequestParam(name = "delete_missing", required = false) String deleteMissingSnakeRaw,
-        @RequestParam(name = "deleteMissing", required = false) String deleteMissingCamelRaw,
+        MultipartFile file,
+        String deleteMissingSnakeRaw,
+        String deleteMissingCamelRaw,
         HttpServletRequest request
     ) {
         if (file == null || file.isEmpty()) {
@@ -1345,16 +1660,548 @@ public class ApiController {
         }
     }
 
-    @GetMapping("/organizations")
     public ResponseEntity<Map<String, Object>> organizationsGet() {
         return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
             .body(mapOf("ok", false, "error", "Используйте POST /api/organizations с JSON body"));
     }
 
-    @PostMapping("/organizations")
-    public ResponseEntity<Map<String, Object>> organizationsPost(@RequestBody(required = false) Map<String, Object> rawBody) {
+    public ResponseEntity<Map<String, Object>> organizationDetails(
+        String organUnitIdRaw
+    ) {
+        String organUnitId = normalizeText(organUnitIdRaw);
+        if (organUnitId == null) {
+            return badRequest("Параметр organUnitId обязателен");
+        }
+        if (!organUnitId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
+            return badRequest("Параметр organUnitId должен быть UUID");
+        }
+        String sql = """
+            select
+              ou.id::text as organ_unit_id,
+              ou.sap_id,
+              ou.short_code,
+              ou.name,
+              ou.sh_name,
+              ou.inn,
+              ou.kpp,
+              ou.ogrn,
+              ou.okpo,
+              coalesce(
+                nullif(trim(coalesce(ou.additional ->> 'kceh_number', ou.additional ->> 'cekh_number')), ''),
+                additional_fallback.kceh_number
+              ) as kceh_number,
+              case
+                when lower(
+                  coalesce(
+                    nullif(trim(coalesce(ou.additional ->> 'fast_track', ou.additional ->> 'fastTrack')), ''),
+                    additional_fallback.fast_track_raw,
+                    ''
+                  )
+                ) in ('true', 't', '1', 'yes', 'да')
+                  then 'ДА'
+                when lower(
+                  coalesce(
+                    nullif(trim(coalesce(ou.additional ->> 'fast_track', ou.additional ->> 'fastTrack')), ''),
+                    additional_fallback.fast_track_raw,
+                    ''
+                  )
+                ) in ('false', 'f', '0', 'no', 'нет')
+                  then 'НЕТ'
+                else null
+              end as fast_track,
+              coalesce(
+                nullif(trim(coalesce(ou.additional ->> 'claim_prefix', ou.additional ->> 'claimPrefix')), ''),
+                additional_fallback.claim_prefix
+              ) as claim_prefix,
+              case when ou.sign_resident = true then 'ДА' else 'НЕТ' end as sign_resident,
+              ou.country_id::text as country_id,
+              c.name as country_name,
+              addr.full_address as address,
+              coalesce(types.organ_unit_types, '[]'::jsonb)::text as organ_unit_types,
+              coalesce(ou.data_info, '{}'::jsonb)::text as data_info
+            from party.organ_unit ou
+            left join nsi.country c on c.id = ou.country_id and c.deleted = false
+            left join lateral (
+              select
+                nullif(trim(coalesce(ou2.additional ->> 'kceh_number', ou2.additional ->> 'cekh_number')), '') as kceh_number,
+                nullif(trim(coalesce(ou2.additional ->> 'fast_track', ou2.additional ->> 'fastTrack')), '') as fast_track_raw,
+                nullif(trim(coalesce(ou2.additional ->> 'claim_prefix', ou2.additional ->> 'claimPrefix')), '') as claim_prefix
+              from party.organ_unit ou2
+              where ou2.deleted = false
+                and ou2.id <> ou.id
+                and ou.sap_id is not null
+                and ou2.sap_id = ou.sap_id
+              order by
+                case
+                  when nullif(trim(coalesce(ou2.additional ->> 'claim_prefix', ou2.additional ->> 'claimPrefix')), '') is not null
+                    then 0
+                  else 1
+                end,
+                case
+                  when nullif(trim(coalesce(ou2.additional ->> 'kceh_number', ou2.additional ->> 'cekh_number')), '') is not null
+                    then 0
+                  else 1
+                end,
+                case
+                  when nullif(trim(coalesce(ou2.additional ->> 'fast_track', ou2.additional ->> 'fastTrack')), '') is not null
+                    then 0
+                  else 1
+                end,
+                ou2.updated_at desc nulls last,
+                ou2.created_at desc nulls last,
+                ou2.id
+              limit 1
+            ) as additional_fallback on true
+            left join lateral (
+              select a.full_address
+              from party.address a
+              where a.organ_unit_id = ou.id and a.deleted = false
+              order by a.updated_at desc nulls last, a.created_at desc nulls last, a.id
+              limit 1
+            ) as addr on true
+            left join lateral (
+              select jsonb_agg(
+                       jsonb_build_object(
+                         'organUnitTypeId', out.id::text,
+                         'organUnitTypeCode', out.code,
+                         'organUnitTypeSort', out.sort_order,
+                         'organUnitTypeName', out.name
+                       )
+                       order by out.sort_order nulls last, out.name, out.id
+                     ) as organ_unit_types
+              from party.organ_unit_organ_unit_types ouot
+              join party.organ_unit_type out on out.id = ouot.organ_unit_type_id
+              where ouot.organ_unit_id = ou.id
+            ) as types on true
+            where ou.deleted = false
+              and ou.id = ?::uuid
+            limit 1
+            """;
+        try {
+            List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, organUnitId);
+            if (rows.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(mapOf("ok", false, "error", "Организация не найдена"));
+            }
+            Map<String, Object> source = rows.get(0);
+            LinkedHashMap<String, Object> item = new LinkedHashMap<>(source);
+            List<Map<String, Object>> organUnitTypes = parseJsonArrayOfObjects(source.get("organ_unit_types"));
+            organUnitTypes.sort((left, right) -> {
+                Integer leftSort = left.get("organUnitTypeSort") instanceof Number value ? value.intValue() : Integer.MAX_VALUE;
+                Integer rightSort = right.get("organUnitTypeSort") instanceof Number value ? value.intValue() : Integer.MAX_VALUE;
+                if (!Objects.equals(leftSort, rightSort)) {
+                    return Integer.compare(leftSort, rightSort);
+                }
+                return String.valueOf(left.get("organUnitTypeName")).compareToIgnoreCase(String.valueOf(right.get("organUnitTypeName")));
+            });
+            item.put("organ_unit_types", organUnitTypes);
+            item.put("data_info", parseJsonObject(source.get("data_info")));
+            List<String> organUnitTypeNameItems = new ArrayList<>();
+            for (Map<String, Object> typeItem : organUnitTypes) {
+                String name = normalizeText(typeItem.get("organUnitTypeName"));
+                if (name != null) {
+                    organUnitTypeNameItems.add(name);
+                }
+            }
+            item.put("organ_unit_type_names", organUnitTypeNameItems);
+            return ResponseEntity.ok(mapOf("ok", true, "item", item));
+        } catch (Exception exception) {
+            return serverError(exception, "Внутренняя ошибка запроса");
+        }
+    }
+
+    public ResponseEntity<Map<String, Object>> organizationUpdate(
+        String organUnitIdRaw,
+        Map<String, Object> rawBody
+    ) {
+        String organUnitId = normalizeText(organUnitIdRaw);
+        if (organUnitId == null) {
+            return badRequest("Параметр organUnitId обязателен");
+        }
+        if (!organUnitId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
+            return badRequest("Параметр organUnitId должен быть UUID");
+        }
+
         Map<String, Object> body = normalizeRequestBody(rawBody);
-        String arrayParamError = hasArrayValue(body, Set.of("sorts"));
+
+        boolean hasSapId = body.containsKey("sapId") || body.containsKey("sap_id");
+        boolean hasName = body.containsKey("name");
+        boolean hasShName = body.containsKey("shName") || body.containsKey("sh_name");
+        boolean hasInn = body.containsKey("inn");
+        boolean hasKpp = body.containsKey("kpp");
+        boolean hasOgrn = body.containsKey("ogrn");
+        boolean hasOkpo = body.containsKey("okpo");
+        boolean hasShortCode = body.containsKey("shortCode") || body.containsKey("short_code");
+        boolean hasCountryId = body.containsKey("countryId") || body.containsKey("country_id");
+        boolean hasSignResident = body.containsKey("signResident") || body.containsKey("sign_resident");
+        boolean hasKcehNumber = body.containsKey("kcehNumber") || body.containsKey("kceh_number");
+        boolean hasAddress = body.containsKey("address") || body.containsKey("fullAddress");
+        boolean hasClaimPrefix = body.containsKey("claimPrefix") || body.containsKey("claim_prefix");
+        boolean hasFastTrack = body.containsKey("fastTrack") || body.containsKey("fast_track");
+        boolean hasOrganUnitTypeIds = body.containsKey("organUnitTypeIds") || body.containsKey("organ_unit_type_ids");
+
+        String sapId = normalizeText(body.containsKey("sapId") ? body.get("sapId") : body.get("sap_id"));
+        String name = normalizeText(body.get("name"));
+        String shName = normalizeText(body.containsKey("shName") ? body.get("shName") : body.get("sh_name"));
+        String inn = normalizeText(body.get("inn"));
+        String kpp = normalizeText(body.get("kpp"));
+        String ogrn = normalizeText(body.get("ogrn"));
+        String okpo = normalizeText(body.get("okpo"));
+        String shortCode = normalizeText(body.containsKey("shortCode") ? body.get("shortCode") : body.get("short_code"));
+        String countryId = normalizeText(body.containsKey("countryId") ? body.get("countryId") : body.get("country_id"));
+        String signResidentRaw = normalizeText(
+            body.containsKey("signResident")
+                ? body.get("signResident")
+                : body.get("sign_resident")
+        );
+        String kcehNumber = normalizeText(
+            body.containsKey("kcehNumber")
+                ? body.get("kcehNumber")
+                : body.get("kceh_number")
+        );
+        String address = normalizeText(body.containsKey("address") ? body.get("address") : body.get("fullAddress"));
+        String claimPrefix = normalizeText(
+            body.containsKey("claimPrefix")
+                ? body.get("claimPrefix")
+                : body.get("claim_prefix")
+        );
+
+        Object fastTrackRawValue = body.containsKey("fastTrack")
+            ? body.get("fastTrack")
+            : body.get("fast_track");
+        String fastTrackText = normalizeText(fastTrackRawValue);
+        Boolean fastTrack = null;
+        if (fastTrackRawValue instanceof Boolean booleanValue) {
+            fastTrack = booleanValue;
+        } else if (fastTrackText != null) {
+            String normalized = fastTrackText.toUpperCase(Locale.ROOT);
+            if (Set.of("ДА", "TRUE", "T", "1", "YES").contains(normalized)) {
+                fastTrack = true;
+            } else if (Set.of("НЕТ", "FALSE", "F", "0", "NO").contains(normalized)) {
+                fastTrack = false;
+            } else {
+                return badRequest("Параметр fastTrack должен быть ДА/НЕТ или true/false");
+            }
+        }
+
+        Boolean signResident = null;
+        if (signResidentRaw != null) {
+            String upper = signResidentRaw.toUpperCase(Locale.ROOT);
+            if (Set.of("ДА", "TRUE", "T", "1", "YES").contains(upper)) {
+                signResident = true;
+            } else if (Set.of("НЕТ", "FALSE", "F", "0", "NO").contains(upper)) {
+                signResident = false;
+            } else {
+                return badRequest("Параметр signResident должен быть ДА/НЕТ или true/false");
+            }
+        }
+
+        if (countryId != null
+            && !countryId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
+            return badRequest("Параметр countryId должен быть UUID");
+        }
+
+        LinkedHashSet<String> uniqueTypeIds = new LinkedHashSet<>();
+        if (hasOrganUnitTypeIds) {
+            Object rawTypeIds = body.containsKey("organUnitTypeIds")
+                ? body.get("organUnitTypeIds")
+                : body.get("organ_unit_type_ids");
+            if (rawTypeIds == null) {
+                rawTypeIds = List.of();
+            }
+            if (!(rawTypeIds instanceof List<?> rawTypeIdList)) {
+                return badRequest("Параметр organUnitTypeIds должен быть массивом UUID");
+            }
+            for (Object rawTypeId : rawTypeIdList) {
+                String typeId = normalizeText(rawTypeId);
+                if (typeId == null) {
+                    continue;
+                }
+                if (!typeId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
+                    return badRequest("Параметр organUnitTypeIds должен содержать только UUID");
+                }
+                uniqueTypeIds.add(typeId);
+            }
+        }
+        List<String> organUnitTypeIds = new ArrayList<>(uniqueTypeIds);
+
+        try {
+            Integer organizationExists = jdbcTemplate.queryForObject(
+                """
+                select count(*)::int
+                from party.organ_unit ou
+                where ou.id = ?::uuid
+                  and ou.deleted = false
+                """,
+                Integer.class,
+                organUnitId
+            );
+            if (organizationExists == null || organizationExists == 0) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf(
+                    "ok", false,
+                    "error", "Организация не найдена"
+                ));
+            }
+
+            Map<String, Object> currentOrg = jdbcTemplate.queryForMap(
+                """
+                select
+                  ou.sap_id,
+                  ou.name,
+                  ou.sh_name,
+                  ou.inn,
+                  ou.kpp,
+                  ou.ogrn,
+                  ou.okpo,
+                  ou.short_code,
+                  ou.country_id::text as country_id,
+                  ou.sign_resident,
+                  coalesce(ou.additional::text, '{}') as additional_json
+                from party.organ_unit ou
+                where ou.id = ?::uuid
+                  and ou.deleted = false
+                limit 1
+                """,
+                organUnitId
+            );
+
+            if (!hasSapId) {
+                sapId = normalizeText(currentOrg.get("sap_id"));
+            }
+            if (!hasName) {
+                name = normalizeText(currentOrg.get("name"));
+            }
+            if (!hasShName) {
+                shName = normalizeText(currentOrg.get("sh_name"));
+            }
+            if (!hasInn) {
+                inn = normalizeText(currentOrg.get("inn"));
+            }
+            if (!hasKpp) {
+                kpp = normalizeText(currentOrg.get("kpp"));
+            }
+            if (!hasOgrn) {
+                ogrn = normalizeText(currentOrg.get("ogrn"));
+            }
+            if (!hasOkpo) {
+                okpo = normalizeText(currentOrg.get("okpo"));
+            }
+            if (!hasShortCode) {
+                shortCode = normalizeText(currentOrg.get("short_code"));
+            }
+            if (!hasCountryId) {
+                countryId = normalizeText(currentOrg.get("country_id"));
+            }
+            if (!hasSignResident && currentOrg.get("sign_resident") instanceof Boolean existingSignResident) {
+                signResident = existingSignResident;
+            }
+
+            if (countryId != null) {
+                Integer countryExists = jdbcTemplate.queryForObject(
+                    """
+                    select count(*)::int
+                    from nsi.country c
+                    where c.id = ?::uuid
+                      and c.deleted = false
+                    """,
+                    Integer.class,
+                    countryId
+                );
+                if (countryExists == null || countryExists == 0) {
+                    return badRequest("Параметр countryId содержит несуществующую страну");
+                }
+            }
+
+            if (hasOrganUnitTypeIds && !organUnitTypeIds.isEmpty()) {
+                String typePlaceholders = String.join(", ", java.util.Collections.nCopies(organUnitTypeIds.size(), "?::uuid"));
+                List<Object> typeParams = new ArrayList<>(organUnitTypeIds);
+                Integer existingTypes = jdbcTemplate.queryForObject(
+                    """
+                    select count(*)::int
+                    from party.organ_unit_type out
+                    where out.deleted = false
+                      and out.id in (%s)
+                    """.formatted(typePlaceholders),
+                    Integer.class,
+                    typeParams.toArray()
+                );
+                if (existingTypes == null || existingTypes != organUnitTypeIds.size()) {
+                    return badRequest("Параметр organUnitTypeIds содержит несуществующие типы организации");
+                }
+            }
+
+            String existingAdditionalText = normalizeText(currentOrg.get("additional_json"));
+
+            LinkedHashMap<String, Object> additional = new LinkedHashMap<>();
+            try {
+                if (existingAdditionalText != null) {
+                    Map<String, Object> parsed = objectMapper.readValue(
+                        existingAdditionalText,
+                        new TypeReference<Map<String, Object>>() {}
+                    );
+                    if (parsed != null) {
+                        additional.putAll(parsed);
+                    }
+                }
+            } catch (Exception ignored) {
+                additional.clear();
+            }
+
+            if (hasKcehNumber) {
+                if (kcehNumber == null) {
+                    additional.remove("kceh_number");
+                    additional.remove("cekh_number");
+                } else {
+                    additional.put("kceh_number", kcehNumber);
+                    additional.remove("cekh_number");
+                }
+            }
+
+            if (hasClaimPrefix) {
+                if (claimPrefix == null) {
+                    additional.remove("claim_prefix");
+                    additional.remove("claimPrefix");
+                } else {
+                    additional.put("claim_prefix", claimPrefix);
+                    additional.remove("claimPrefix");
+                }
+            }
+
+            if (hasFastTrack) {
+                if (fastTrack == null) {
+                    additional.remove("fast_track");
+                    additional.remove("fastTrack");
+                } else {
+                    additional.put("fast_track", fastTrack);
+                    additional.remove("fastTrack");
+                }
+            }
+
+            String additionalJson = objectMapper.writeValueAsString(additional);
+
+            int updatedCount = jdbcTemplate.update(
+                """
+                update party.organ_unit
+                set
+                  sap_id = ?,
+                  name = ?,
+                  sh_name = ?,
+                  inn = ?,
+                  kpp = ?,
+                  ogrn = ?,
+                  okpo = ?,
+                  short_code = ?,
+                  country_id = ?::uuid,
+                  sign_resident = ?,
+                  additional = ?::jsonb,
+                  updated_at = now()
+                where id = ?::uuid
+                  and deleted = false
+                """,
+                sapId,
+                name,
+                shName,
+                inn,
+                kpp,
+                ogrn,
+                okpo,
+                shortCode,
+                countryId,
+                signResident,
+                additionalJson,
+                organUnitId
+            );
+            if (updatedCount == 0) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf(
+                    "ok", false,
+                    "error", "Организация не найдена или удалена"
+                ));
+            }
+
+            if (hasOrganUnitTypeIds) {
+                jdbcTemplate.update(
+                    """
+                    delete from party.organ_unit_organ_unit_types
+                    where organ_unit_id = ?::uuid
+                    """,
+                    organUnitId
+                );
+                if (!organUnitTypeIds.isEmpty()) {
+                    String insertPlaceholders = organUnitTypeIds.stream()
+                        .map((item) -> "(?::uuid, ?::uuid)")
+                        .collect(Collectors.joining(", "));
+                    List<Object> insertParams = new ArrayList<>();
+                    for (String typeId : organUnitTypeIds) {
+                        insertParams.add(organUnitId);
+                        insertParams.add(typeId);
+                    }
+                    jdbcTemplate.update(
+                        """
+                        insert into party.organ_unit_organ_unit_types (
+                          organ_unit_id,
+                          organ_unit_type_id
+                        )
+                        values %s
+                        """.formatted(insertPlaceholders),
+                        insertParams.toArray()
+                    );
+                }
+            }
+
+            List<Map<String, Object>> addressRows = jdbcTemplate.queryForList(
+                """
+                select a.id::text as id
+                from party.address a
+                where a.organ_unit_id = ?::uuid
+                  and a.deleted = false
+                order by a.updated_at desc nulls last, a.created_at desc nulls last, a.id
+                limit 1
+                """,
+                organUnitId
+            );
+            String addressId = addressRows.isEmpty() ? null : normalizeText(addressRows.get(0).get("id"));
+            if (hasAddress) {
+                if (addressId != null) {
+                    jdbcTemplate.update(
+                        """
+                        update party.address
+                        set
+                          full_address = ?,
+                          updated_at = now()
+                        where id = ?::uuid
+                        """,
+                        address,
+                        addressId
+                    );
+                } else if (address != null) {
+                    jdbcTemplate.update(
+                        """
+                        insert into party.address (
+                          id,
+                          full_address,
+                          organ_unit_id,
+                          deleted,
+                          created_at,
+                          updated_at
+                        )
+                        values (?::uuid, ?, ?::uuid, false, now(), now())
+                        """,
+                        UUID.randomUUID().toString(),
+                        address,
+                        organUnitId
+                    );
+                }
+            }
+
+            return organizationDetails(organUnitId);
+        } catch (Exception exception) {
+            return serverError(exception, "Внутренняя ошибка обновления организации");
+        }
+    }
+
+    public ResponseEntity<Map<String, Object>> organizationsPost(Map<String, Object> rawBody) {
+        Map<String, Object> body = normalizeRequestBody(rawBody);
+        String arrayParamError = hasArrayValue(body, Set.of("sorts", "organUnitTypeNames"));
         if (arrayParamError != null) {
             return badRequest("Параметр " + arrayParamError + " должен содержать одно значение");
         }
@@ -1376,10 +2223,24 @@ public class ApiController {
             ? List.of(new SortRule("name", "ASC"))
             : sortsResult.sorts();
 
+        String organUnitId = normalizeText(body.get("organUnitId"));
+        if (organUnitId != null
+            && !organUnitId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
+            return badRequest("Параметр organUnitId должен быть UUID");
+        }
+
         List<Object> params = new ArrayList<>();
         List<String> orgWhere = new ArrayList<>();
         orgWhere.add("ou.deleted = false");
+        orgWhere.add("ou.parent_id is null");
+        orgWhere.add("ou.sap_id is not null");
+        orgWhere.add("trim(ou.sap_id) <> ''");
         List<String> extraWhere = new ArrayList<>();
+
+        if (organUnitId != null) {
+            orgWhere.add("ou.id = ?::uuid");
+            params.add(organUnitId);
+        }
 
         for (Map.Entry<String, String> filter : List.of(
             Map.entry("sapId", "sap_id"),
@@ -1427,6 +2288,23 @@ public class ApiController {
             params.add("ДА".equals(upper));
         }
 
+        List<String> organUnitTypeNames = normalizeStringList(
+            body.containsKey("organUnitTypeNames") ? body.get("organUnitTypeNames") : body.get("organTypeNames")
+        );
+        if (!organUnitTypeNames.isEmpty()) {
+            String placeholders = organUnitTypeNames.stream().map(item -> "?").collect(Collectors.joining(", "));
+            orgWhere.add("""
+                exists (
+                  select 1
+                  from party.organ_unit_organ_unit_types ouot_filter
+                  join party.organ_unit_type out_filter on out_filter.id = ouot_filter.organ_unit_type_id
+                  where ouot_filter.organ_unit_id = ou.id
+                    and out_filter.name in (%s)
+                )
+                """.formatted(placeholders));
+            params.addAll(organUnitTypeNames);
+        }
+
         String orgWhereSql = "where " + String.join(" and ", orgWhere);
         String extraWhereSql = extraWhere.isEmpty() ? "" : "and " + String.join(" and ", extraWhere);
         String orderBySql = buildOrganizationOrderBy(sorts);
@@ -1435,8 +2313,11 @@ public class ApiController {
         int offset = offsetParsed.value();
         int sqlOffset = (offset - 1) * limit;
 
-        boolean isFastPath = !hasCountryName && !hasAddress && sorts.stream()
-            .noneMatch(rule -> "country_name".equals(rule.field()) || "address".equals(rule.field()));
+        boolean isFastPath = !hasCountryName && !hasAddress && sorts.stream().noneMatch(
+            rule -> "country_name".equals(rule.field())
+                || "address".equals(rule.field())
+                || "organ_unit_type_names".equals(rule.field())
+        );
 
         String dataSql = isFastPath
             ? """
@@ -1463,6 +2344,7 @@ public class ApiController {
               from paged_base
             )
             select
+              p.id::text as organ_unit_id,
               p.sap_id,
               p.name,
               p.sh_name,
@@ -1472,7 +2354,8 @@ public class ApiController {
               p.okpo,
               case when p.sign_resident = true then 'ДА' else 'НЕТ' end as sign_resident,
               c.name as country_name,
-              addr.full_address as address
+              addr.full_address as address,
+              coalesce(types.organ_unit_types, '[]'::jsonb)::text as organ_unit_types
             from paged p
             left join nsi.country c on c.id = p.country_id and c.deleted = false
             left join lateral (
@@ -1482,10 +2365,30 @@ public class ApiController {
               order by a.updated_at desc nulls last, a.created_at desc nulls last, a.id
               limit 1
             ) as addr on true
+            left join lateral (
+              select jsonb_agg(
+                       jsonb_build_object(
+                         'organUnitTypeId', out.id::text,
+                         'organUnitTypeCode', out.code,
+                         'organUnitTypeSort', out.sort_order,
+                         'organUnitTypeName', out.name
+                       )
+                       order by out.sort_order nulls last, out.name, out.id
+                     ) as organ_unit_types,
+                     string_agg(
+                       coalesce(out.name, ''),
+                       ' | '
+                       order by out.sort_order nulls last, out.name, out.id
+                     ) as organ_unit_type_names_sort
+              from party.organ_unit_organ_unit_types ouot
+              join party.organ_unit_type out on out.id = ouot.organ_unit_type_id
+              where ouot.organ_unit_id = p.id
+            ) as types on true
             order by p.order_idx
             """.formatted(orgWhereSql, orderBySql)
             : """
             select
+              ou.id::text as organ_unit_id,
               ou.sap_id,
               ou.name,
               ou.sh_name,
@@ -1495,7 +2398,8 @@ public class ApiController {
               ou.okpo,
               case when ou.sign_resident = true then 'ДА' else 'НЕТ' end as sign_resident,
               c.name as country_name,
-              addr.full_address as address
+              addr.full_address as address,
+              coalesce(types.organ_unit_types, '[]'::jsonb)::text as organ_unit_types
             from party.organ_unit ou
             left join nsi.country c on c.id = ou.country_id and c.deleted = false
             left join lateral (
@@ -1505,6 +2409,25 @@ public class ApiController {
               order by a.updated_at desc nulls last, a.created_at desc nulls last, a.id
               limit 1
             ) as addr on true
+            left join lateral (
+              select jsonb_agg(
+                       jsonb_build_object(
+                         'organUnitTypeId', out.id::text,
+                         'organUnitTypeCode', out.code,
+                         'organUnitTypeSort', out.sort_order,
+                         'organUnitTypeName', out.name
+                       )
+                       order by out.sort_order nulls last, out.name, out.id
+                     ) as organ_unit_types,
+                     string_agg(
+                       coalesce(out.name, ''),
+                       ' | '
+                       order by out.sort_order nulls last, out.name, out.id
+                     ) as organ_unit_type_names_sort
+              from party.organ_unit_organ_unit_types ouot
+              join party.organ_unit_type out on out.id = ouot.organ_unit_type_id
+              where ouot.organ_unit_id = ou.id
+            ) as types on true
             %s
             %s
             order by %s
@@ -1530,8 +2453,31 @@ public class ApiController {
             List<Object> pagedParams = new ArrayList<>(params);
             pagedParams.add(limit);
             pagedParams.add(sqlOffset);
-            List<Map<String, Object>> items = jdbcTemplate.queryForList(dataSql, pagedParams.toArray());
-            Integer totalCount = jdbcTemplate.queryForObject(countSql, Integer.class, params.toArray());
+            List<Map<String, Object>> rawItems = reportTemplateRepository.queryForList(dataSql, pagedParams.toArray());
+            List<Map<String, Object>> items = new ArrayList<>(rawItems.size());
+            for (Map<String, Object> item : rawItems) {
+                LinkedHashMap<String, Object> mapped = new LinkedHashMap<>(item);
+                List<Map<String, Object>> organUnitTypes = parseJsonArrayOfObjects(item.get("organ_unit_types"));
+                organUnitTypes.sort((left, right) -> {
+                    Integer leftSort = left.get("organUnitTypeSort") instanceof Number value ? value.intValue() : Integer.MAX_VALUE;
+                    Integer rightSort = right.get("organUnitTypeSort") instanceof Number value ? value.intValue() : Integer.MAX_VALUE;
+                    if (!Objects.equals(leftSort, rightSort)) {
+                        return Integer.compare(leftSort, rightSort);
+                    }
+                    return String.valueOf(left.get("organUnitTypeName")).compareToIgnoreCase(String.valueOf(right.get("organUnitTypeName")));
+                });
+                mapped.put("organ_unit_types", organUnitTypes);
+                List<String> organUnitTypeNameItems = new ArrayList<>();
+                for (Map<String, Object> typeItem : organUnitTypes) {
+                    String name = normalizeText(typeItem.get("organUnitTypeName"));
+                    if (name != null) {
+                        organUnitTypeNameItems.add(name);
+                    }
+                }
+                mapped.put("organ_unit_type_names", organUnitTypeNameItems);
+                items.add(mapped);
+            }
+            Integer totalCount = reportTemplateRepository.queryForObject(countSql, Integer.class, params.toArray());
             return ResponseEntity.ok(mapOf(
                 "ok", true,
                 "items", items,
@@ -1546,8 +2492,7 @@ public class ApiController {
         }
     }
 
-    @PostMapping("/organizations/export")
-    public ResponseEntity<?> organizationsExport(@RequestBody(required = false) Map<String, Object> rawBody) {
+    public ResponseEntity<?> organizationsExport(Map<String, Object> rawBody) {
         Map<String, Object> body = normalizeRequestBody(rawBody);
         String arrayParamError = hasArrayValue(body, Set.of("sorts", "columns"));
         if (arrayParamError != null) {
@@ -1620,6 +2565,21 @@ public class ApiController {
             params.add("ДА".equals(upper));
         }
 
+        List<String> organUnitTypeNames = normalizeStringList(body.get("organUnitTypeNames"));
+        if (!organUnitTypeNames.isEmpty()) {
+            String placeholders = organUnitTypeNames.stream().map(item -> "?").collect(Collectors.joining(", "));
+            extraWhere.add("""
+                exists (
+                  select 1
+                  from party.organ_unit_organ_unit_types ouot_filter
+                  join party.organ_unit_type out_filter on out_filter.id = ouot_filter.organ_unit_type_id
+                  where ouot_filter.organ_unit_id = ou.id
+                    and out_filter.name in (%s)
+                )
+                """.formatted(placeholders));
+            params.addAll(organUnitTypeNames);
+        }
+
         String orgWhereSql = "where " + String.join(" and ", orgWhere);
         String extraWhereSql = extraWhere.isEmpty() ? "" : "and " + String.join(" and ", extraWhere);
         String orderBy = buildOrganizationOrderBy(sorts);
@@ -1660,1027 +2620,7 @@ public class ApiController {
         }
     }
 
-    @GetMapping("/report-templates")
-    public ResponseEntity<Map<String, Object>> reportTemplatesGet() {
-        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED)
-            .body(mapOf("ok", false, "error", "Используйте POST /api/report-templates с JSON body"));
-    }
-
-    @PostMapping("/report-template")
-    public ResponseEntity<Map<String, Object>> createReportTemplate(
-        @RequestBody(required = false) Map<String, Object> rawBody
-    ) {
-        Map<String, Object> body = normalizeRequestBody(rawBody);
-        String codeReport = normalizeText(body.get("codeReport"));
-        String name = normalizeText(body.get("name"));
-        String outputFileName = normalizeText(body.get("outputFileName"));
-        String outputFileType = normalizeText(body.get("outputFileType"));
-        String version = normalizeText(body.get("version"));
-        String status = normalizeText(body.get("status"));
-        String method = normalizeText(body.get("method"));
-
-        if (codeReport == null) {
-            return badRequest("Параметр codeReport обязателен");
-        }
-        if (name == null) {
-            return badRequest("Параметр name обязателен");
-        }
-        if (outputFileName == null) {
-            return badRequest("Параметр outputFileName обязателен");
-        }
-
-        String normalizedOutputFileType = outputFileType == null ? "XLSX" : outputFileType.toUpperCase(Locale.ROOT);
-        if (!"XLSX".equals(normalizedOutputFileType)) {
-            return badRequest("Параметр outputFileType должен быть XLSX");
-        }
-
-        String normalizedMethod = method == null ? "AUTO" : method.toUpperCase(Locale.ROOT);
-        if (!Set.of("AUTO", "HAND").contains(normalizedMethod)) {
-            return badRequest("Параметр method должен быть AUTO или HAND");
-        }
-
-        String normalizedStatus = status == null ? "ACTIVE" : status.toUpperCase(Locale.ROOT);
-        if (!Set.of("ACTIVE", "INACTIVE").contains(normalizedStatus)) {
-            return badRequest("Параметр status должен быть ACTIVE или INACTIVE");
-        }
-
-        Integer numberDays = null;
-        if (body.containsKey("numberDays")) {
-            String normalizedNumberDaysText = normalizeText(body.get("numberDays"));
-            if (normalizedNumberDaysText != null) {
-                if (!normalizedNumberDaysText.matches("^\\d+$")) {
-                    return badRequest("Параметр numberDays должен быть целым неотрицательным числом");
-                }
-                try {
-                    numberDays = Integer.valueOf(normalizedNumberDaysText);
-                } catch (Exception exception) {
-                    return badRequest("Параметр numberDays должен быть целым неотрицательным числом");
-                }
-            }
-        }
-
-        String reportTemplateId = UUID.randomUUID().toString();
-        try {
-            jdbcTemplate.update(
-                """
-                insert into public.report_templates(
-                  id, code_report, name, output_file_name, output_file_type,
-                  version, status, method, number_days, sql_query, report_info, deleted
-                )
-                values (?::uuid, ?, ?, ?, ?, ?, ?, ?, ?, '', null, false)
-                """,
-                reportTemplateId,
-                codeReport,
-                name,
-                outputFileName,
-                normalizedOutputFileType,
-                version,
-                normalizedStatus,
-                normalizedMethod,
-                numberDays
-            );
-            return ResponseEntity.ok(mapOf(
-                "ok", true,
-                "item", mapOf(
-                    "reportTemplateId", reportTemplateId,
-                    "codeReport", codeReport,
-                    "name", name,
-                    "outputFileName", outputFileName,
-                    "outputFileType", normalizedOutputFileType,
-                    "version", version,
-                    "status", normalizedStatus,
-                    "method", normalizedMethod,
-                    "numberDays", numberDays,
-                    "sqlQuery", "",
-                    "reportInfo", null,
-                    "organizations", List.of(),
-                    "accessGroups", List.of()
-                )
-            ));
-        } catch (Exception exception) {
-            return serverError(exception, "Ошибка создания отчета");
-        }
-    }
-
-    @PostMapping("/report-templates/create")
-    public ResponseEntity<Map<String, Object>> createReportTemplateAlias(
-        @RequestBody(required = false) Map<String, Object> rawBody
-    ) {
-        return createReportTemplate(rawBody);
-    }
-
-    @PostMapping("/report-templates")
-    public ResponseEntity<Map<String, Object>> reportTemplatesPost(
-        @RequestBody(required = false) Map<String, Object> rawBody
-    ) {
-        Map<String, Object> body = normalizeRequestBody(rawBody);
-        String arrayParamError = hasArrayValue(body, Set.of("sorts"));
-        if (arrayParamError != null) {
-            return badRequest("Параметр " + arrayParamError + " должен содержать одно значение");
-        }
-
-        ParseResult limitParsed = parsePositiveInteger(body.get("limit"), 50, "limit");
-        if (limitParsed.error() != null) {
-            return badRequest(limitParsed.error());
-        }
-        ParseResult offsetParsed = parsePositiveInteger(body.get("offset"), 1, "offset");
-        if (offsetParsed.error() != null) {
-            return badRequest(offsetParsed.error());
-        }
-
-        SortParseResult sortsResult = parseSorts(body, REPORT_TEMPLATE_SORT_FIELDS, "code_report");
-        if (sortsResult.error() != null) {
-            return badRequest(sortsResult.error());
-        }
-        List<SortRule> sorts = sortsResult.sorts().isEmpty()
-            ? List.of(new SortRule("code_report", "ASC"))
-            : sortsResult.sorts();
-
-        int limit = limitParsed.value();
-        int offset = offsetParsed.value();
-        int sqlOffset = (offset - 1) * limit;
-
-        List<Object> params = new ArrayList<>();
-        List<String> where = new ArrayList<>();
-        where.add("rt.deleted = false");
-
-        String codeReport = normalizeText(body.get("codeReport"));
-        if (codeReport != null) {
-            for (String token : splitSearchTokens(codeReport)) {
-                where.add("rt.code_report ILIKE ?");
-                params.add("%" + token + "%");
-            }
-        }
-        String name = normalizeText(body.get("name"));
-        if (name != null) {
-            for (String token : splitSearchTokens(name)) {
-                where.add("rt.name ILIKE ?");
-                params.add("%" + token + "%");
-            }
-        }
-        String outputFileName = normalizeText(body.get("outputFileName"));
-        if (outputFileName != null) {
-            for (String token : splitSearchTokens(outputFileName)) {
-                where.add("rt.output_file_name ILIKE ?");
-                params.add("%" + token + "%");
-            }
-        }
-        String outputFileType = normalizeText(body.get("outputFileType"));
-        if (outputFileType != null) {
-            for (String token : splitSearchTokens(outputFileType)) {
-                where.add("rt.output_file_type ILIKE ?");
-                params.add("%" + token + "%");
-            }
-        }
-        String version = normalizeText(body.get("version"));
-        if (version != null) {
-            for (String token : splitSearchTokens(version)) {
-                where.add("rt.version::text ILIKE ?");
-                params.add("%" + token + "%");
-            }
-        }
-        String status = normalizeText(body.get("status"));
-        if (status != null) {
-            for (String token : splitSearchTokens(status)) {
-                where.add("rt.status ILIKE ?");
-                params.add("%" + token + "%");
-            }
-        }
-        String method = normalizeText(body.get("method"));
-        if (method != null) {
-            for (String token : splitSearchTokens(method)) {
-                where.add("rt.method ILIKE ?");
-                params.add("%" + token + "%");
-            }
-        }
-
-        String whereSql = "where " + String.join(" and ", where);
-        String orderBy = buildReportTemplateOrderBy(sorts);
-
-        String dataSql = """
-            select
-              rt.id::text as report_template_id,
-              rt.code_report as code_report,
-              rt.name as name,
-              rt.output_file_name as output_file_name,
-              rt.output_file_type as output_file_type,
-              rt.version as version,
-              rt.status as status,
-              rt.method as method,
-              rt.number_days as number_days,
-              rt.sql_query as sql_query,
-              rt.report_info as report_info,
-              coalesce((
-                select jsonb_agg(
-                  jsonb_build_object(
-                    'organUnitId', organization_item.organ_unit_id,
-                    'organUnitName', organization_item.organ_unit_name
-                  )
-                  order by organization_item.organ_unit_name, organization_item.organ_unit_id
-                )
-                from (
-                  select distinct
-                    rto.claim_organization_id::text as organ_unit_id,
-                    coalesce(ou.sh_name, '') as organ_unit_name
-                  from public.report_template_organizations rto
-                  left join party.organ_unit ou
-                    on ou.id = rto.claim_organization_id
-                  where rto.report_template_id = rt.id
-                ) organization_item
-              ), '[]'::jsonb)::text as organizations,
-              coalesce((
-                select jsonb_agg(
-                  jsonb_build_object('codeAccess', access_item.code_access)
-                  order by access_item.code_access
-                )
-                from (
-                  select distinct
-                    rag.code_access as code_access
-                  from public.report_access_group rag
-                  where rag.report_template_id = rt.id
-                    and rag.code_access is not null
-                ) access_item
-              ), '[]'::jsonb)::text as access_groups
-            from public.report_templates rt
-            %s
-            order by %s
-            limit ?
-            offset ?
-            """.formatted(whereSql, orderBy);
-        String countSql = """
-            select count(*)::int
-            from public.report_templates rt
-            %s
-            """.formatted(whereSql);
-
-        try {
-            List<Object> pagedParams = new ArrayList<>(params);
-            pagedParams.add(limit);
-            pagedParams.add(sqlOffset);
-            List<Map<String, Object>> rawItems = jdbcTemplate.queryForList(dataSql, pagedParams.toArray());
-            List<Map<String, Object>> items = new ArrayList<>(rawItems.size());
-            for (Map<String, Object> item : rawItems) {
-                LinkedHashMap<String, Object> mapped = new LinkedHashMap<>();
-                mapped.put("reportTemplateId", item.get("report_template_id"));
-                mapped.put("codeReport", item.get("code_report"));
-                mapped.put("name", item.get("name"));
-                mapped.put("outputFileName", item.get("output_file_name"));
-                mapped.put("outputFileType", item.get("output_file_type"));
-                mapped.put("version", item.get("version"));
-                mapped.put("status", item.get("status"));
-                mapped.put("method", item.get("method"));
-                mapped.put("numberDays", item.get("number_days"));
-                mapped.put("sqlQuery", item.get("sql_query"));
-                mapped.put("reportInfo", item.get("report_info"));
-                mapped.put("organizations", parseJsonArrayOfObjects(item.get("organizations")));
-                mapped.put("accessGroups", parseJsonArrayOfObjects(item.get("access_groups")));
-                items.add(mapped);
-            }
-            Integer totalCount = jdbcTemplate.queryForObject(countSql, Integer.class, params.toArray());
-            return ResponseEntity.ok(mapOf(
-                "ok", true,
-                "items", items,
-                "count", items.size(),
-                "totalCount", totalCount == null ? 0 : totalCount,
-                "limit", limit,
-                "offset", offset,
-                "sorts", toSortMapsCamel(sorts)
-            ));
-        } catch (Exception exception) {
-            return serverError(exception, "Внутренняя ошибка запроса");
-        }
-    }
-
-    @PatchMapping("/report-template/{reportTemplateId}")
-    public ResponseEntity<Map<String, Object>> updateReportTemplateMainSettings(
-        @PathVariable("reportTemplateId") String reportTemplateId,
-        @RequestBody(required = false) Map<String, Object> rawBody
-    ) {
-        String normalizedReportTemplateId = normalizeText(reportTemplateId);
-        if (normalizedReportTemplateId == null) {
-            return badRequest("Параметр reportTemplateId обязателен");
-        }
-        if (!normalizedReportTemplateId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
-            return badRequest("Параметр reportTemplateId должен быть UUID");
-        }
-        Map<String, Object> body = normalizeRequestBody(rawBody);
-        String codeReport = normalizeText(body.get("codeReport"));
-        String name = normalizeText(body.get("name"));
-        String outputFileName = normalizeText(body.get("outputFileName"));
-        String outputFileType = normalizeText(body.get("outputFileType"));
-        String version = normalizeText(body.get("version"));
-        String status = normalizeText(body.get("status"));
-        String method = normalizeText(body.get("method"));
-        Integer numberDays = null;
-        if (body.containsKey("numberDays")) {
-            Object numberDaysRaw = body.get("numberDays");
-            String normalizedNumberDaysText = normalizeText(numberDaysRaw);
-            if (normalizedNumberDaysText != null) {
-                if (!normalizedNumberDaysText.matches("^\\d+$")) {
-                    return badRequest("Параметр numberDays должен быть целым неотрицательным числом");
-                }
-                try {
-                    numberDays = Integer.valueOf(normalizedNumberDaysText);
-                } catch (Exception exception) {
-                    return badRequest("Параметр numberDays должен быть целым неотрицательным числом");
-                }
-            }
-        }
-        try {
-            int updated = jdbcTemplate.update(
-                """
-                update public.report_templates
-                set code_report = ?,
-                    name = ?,
-                    output_file_name = ?,
-                    output_file_type = ?,
-                    version = ?,
-                    status = ?,
-                    method = ?,
-                    number_days = ?
-                where id = ?::uuid
-                  and deleted = false
-                """,
-                codeReport,
-                name,
-                outputFileName,
-                outputFileType,
-                version,
-                status,
-                method,
-                numberDays,
-                normalizedReportTemplateId
-            );
-            if (updated == 0) {
-                return badRequest("Шаблон отчета не найден");
-            }
-            return ResponseEntity.ok(mapOf(
-                "ok", true,
-                "item", mapOf(
-                    "reportTemplateId", normalizedReportTemplateId,
-                    "codeReport", codeReport,
-                    "name", name,
-                    "outputFileName", outputFileName,
-                    "outputFileType", outputFileType,
-                    "version", version,
-                    "status", status,
-                    "method", method,
-                    "numberDays", numberDays
-                )
-            ));
-        } catch (Exception exception) {
-            return serverError(exception, "Ошибка сохранения основных настроек отчета");
-        }
-    }
-
-    @PatchMapping("/report-templates/{reportTemplateId}")
-    public ResponseEntity<Map<String, Object>> updateReportTemplateMainSettingsAlias(
-        @PathVariable("reportTemplateId") String reportTemplateId,
-        @RequestBody(required = false) Map<String, Object> rawBody
-    ) {
-        return updateReportTemplateMainSettings(reportTemplateId, rawBody);
-    }
-
-    @DeleteMapping("/report-template/{reportTemplateId}")
-    public ResponseEntity<Map<String, Object>> deleteReportTemplate(
-        @PathVariable("reportTemplateId") String reportTemplateId
-    ) {
-        String normalizedReportTemplateId = normalizeText(reportTemplateId);
-        if (normalizedReportTemplateId == null) {
-            return badRequest("Параметр reportTemplateId обязателен");
-        }
-        if (!normalizedReportTemplateId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
-            return badRequest("Параметр reportTemplateId должен быть UUID");
-        }
-        try {
-            Integer templateExists = jdbcTemplate.queryForObject(
-                """
-                select count(*)::int
-                from public.report_templates rt
-                where rt.id = ?::uuid
-                  and rt.deleted = false
-                """,
-                Integer.class,
-                normalizedReportTemplateId
-            );
-            if ((templateExists == null ? 0 : templateExists) == 0) {
-                return badRequest("Шаблон отчета не найден");
-            }
-            int deletedAccessGroups = jdbcTemplate.update(
-                """
-                delete from public.report_access_group
-                where report_template_id = ?::uuid
-                """,
-                normalizedReportTemplateId
-            );
-            int deletedOrganizations = jdbcTemplate.update(
-                """
-                delete from public.report_template_organizations
-                where report_template_id = ?::uuid
-                """,
-                normalizedReportTemplateId
-            );
-            int deletedTemplates = jdbcTemplate.update(
-                """
-                delete from public.report_templates
-                where id = ?::uuid
-                  and deleted = false
-                """,
-                normalizedReportTemplateId
-            );
-            if (deletedTemplates == 0) {
-                return badRequest("Шаблон отчета не найден");
-            }
-            return ResponseEntity.ok(mapOf(
-                "ok", true,
-                "deletedReportTemplateId", normalizedReportTemplateId,
-                "deletedAccessGroups", deletedAccessGroups,
-                "deletedOrganizations", deletedOrganizations,
-                "deletedTemplates", deletedTemplates
-            ));
-        } catch (Exception exception) {
-            return serverError(exception, "Ошибка удаления отчета");
-        }
-    }
-
-    @DeleteMapping("/report-templates/{reportTemplateId}")
-    public ResponseEntity<Map<String, Object>> deleteReportTemplateAlias(
-        @PathVariable("reportTemplateId") String reportTemplateId
-    ) {
-        return deleteReportTemplate(reportTemplateId);
-    }
-
-    @PostMapping("/report-template/sql/validate")
-    public ResponseEntity<Map<String, Object>> validateReportTemplateSql(
-        @RequestBody(required = false) Map<String, Object> rawBody
-    ) {
-        Map<String, Object> body = normalizeRequestBody(rawBody);
-        String sqlQuery = normalizeText(body.get("sqlQuery"));
-        String validationError = validateReportTemplateSqlText(sqlQuery);
-        if (validationError != null) {
-            return badRequest(validationError);
-        }
-        String reportTemplateId = normalizeText(body.get("reportTemplateId"));
-        if (reportTemplateId == null) {
-            return badRequest("Параметр reportTemplateId обязателен");
-        }
-        if (!reportTemplateId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
-            return badRequest("Параметр reportTemplateId должен быть UUID");
-        }
-        Integer numberDays = getReportTemplateNumberDays(reportTemplateId);
-        if (numberDays == null) {
-            return badRequest("Шаблон отчета не найден");
-        }
-        String claimOrganizationId = normalizeText(body.get("claimOrganizationId"));
-        if (
-            claimOrganizationId != null &&
-            !claimOrganizationId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
-        ) {
-            return badRequest("Параметр claimOrganizationId должен быть UUID");
-        }
-        String reportId = normalizeText(body.get("reportId"));
-        if (
-            reportId != null &&
-            !reportId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
-        ) {
-            return badRequest("Параметр reportId должен быть UUID");
-        }
-        List<String> roleNames = normalizeRoleNames(body.get("roleNames"));
-        String method = getReportTemplateMethod(reportTemplateId);
-        if ("HAND".equalsIgnoreCase(method) && roleNames.isEmpty()) {
-            return badRequest("Для отчетов с method=HAND параметр roleNames обязателен");
-        }
-        String sqlForExplain = toReportTemplateCheckSql(
-            sqlQuery,
-            reportTemplateId,
-            numberDays,
-            null,
-            null,
-            claimOrganizationId,
-            reportId,
-            roleNames
-        );
-
-        try {
-            jdbcTemplate.queryForList("explain " + sqlForExplain);
-            return ResponseEntity.ok(mapOf(
-                "ok", true,
-                "message", "SQL-скрипт корректен"
-            ));
-        } catch (Exception exception) {
-            return sqlValidationErrorResponse(exception, sqlQuery, "Ошибка проверки SQL-скрипта");
-        }
-    }
-
-    @PostMapping("/report-templates/sql/validate")
-    public ResponseEntity<Map<String, Object>> validateReportTemplatesSqlAlias(
-        @RequestBody(required = false) Map<String, Object> rawBody
-    ) {
-        return validateReportTemplateSql(rawBody);
-    }
-
-    @DeleteMapping("/report-template/{reportTemplateId}/organizations/{organUnitId}")
-    public ResponseEntity<Map<String, Object>> deleteReportTemplateOrganization(
-        @PathVariable("reportTemplateId") String reportTemplateId,
-        @PathVariable("organUnitId") String organUnitId
-    ) {
-        String normalizedReportTemplateId = normalizeText(reportTemplateId);
-        if (normalizedReportTemplateId == null) {
-            return badRequest("Параметр reportTemplateId обязателен");
-        }
-        if (!normalizedReportTemplateId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
-            return badRequest("Параметр reportTemplateId должен быть UUID");
-        }
-        String normalizedOrganUnitId = normalizeText(organUnitId);
-        if (normalizedOrganUnitId == null) {
-            return badRequest("Параметр organUnitId обязателен");
-        }
-        if (!normalizedOrganUnitId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
-            return badRequest("Параметр organUnitId должен быть UUID");
-        }
-        try {
-            int deletedCount = jdbcTemplate.update(
-                """
-                delete from public.report_template_organizations
-                where report_template_id = ?::uuid
-                  and claim_organization_id = ?::uuid
-                """,
-                normalizedReportTemplateId,
-                normalizedOrganUnitId
-            );
-            if (deletedCount == 0) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf(
-                    "ok", false,
-                    "error", "Связь отчета с организацией не найдена"
-                ));
-            }
-            return ResponseEntity.ok(mapOf(
-                "ok", true,
-                "deletedCount", deletedCount
-            ));
-        } catch (Exception exception) {
-            return serverError(exception, "Внутренняя ошибка удаления");
-        }
-    }
-
-    @DeleteMapping("/report-templates/{reportTemplateId}/organizations/{organUnitId}")
-    public ResponseEntity<Map<String, Object>> deleteReportTemplateOrganizationAlias(
-        @PathVariable("reportTemplateId") String reportTemplateId,
-        @PathVariable("organUnitId") String organUnitId
-    ) {
-        return deleteReportTemplateOrganization(reportTemplateId, organUnitId);
-    }
-
-    @DeleteMapping("/report-template/{reportTemplateId}/access-groups")
-    public ResponseEntity<Map<String, Object>> deleteReportTemplateAccessGroup(
-        @PathVariable("reportTemplateId") String reportTemplateId,
-        @RequestParam("codeAccess") String codeAccess
-    ) {
-        String normalizedReportTemplateId = normalizeText(reportTemplateId);
-        if (normalizedReportTemplateId == null) {
-            return badRequest("Параметр reportTemplateId обязателен");
-        }
-        if (!normalizedReportTemplateId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
-            return badRequest("Параметр reportTemplateId должен быть UUID");
-        }
-        String normalizedCodeAccess = normalizeText(codeAccess);
-        if (normalizedCodeAccess == null) {
-            return badRequest("Параметр codeAccess обязателен");
-        }
-        try {
-            int deletedCount = jdbcTemplate.update(
-                """
-                delete from public.report_access_group
-                where report_template_id = ?::uuid
-                  and code_access = ?
-                """,
-                normalizedReportTemplateId,
-                normalizedCodeAccess
-            );
-            if (deletedCount == 0) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf(
-                    "ok", false,
-                    "error", "Группа доступа отчета не найдена"
-                ));
-            }
-            return ResponseEntity.ok(mapOf(
-                "ok", true,
-                "deletedCount", deletedCount
-            ));
-        } catch (Exception exception) {
-            return serverError(exception, "Внутренняя ошибка удаления");
-        }
-    }
-
-    @DeleteMapping("/report-templates/{reportTemplateId}/access-groups")
-    public ResponseEntity<Map<String, Object>> deleteReportTemplateAccessGroupAlias(
-        @PathVariable("reportTemplateId") String reportTemplateId,
-        @RequestParam("codeAccess") String codeAccess
-    ) {
-        return deleteReportTemplateAccessGroup(reportTemplateId, codeAccess);
-    }
-
-    @PostMapping("/report-template/{reportTemplateId}/organizations")
-    public ResponseEntity<Map<String, Object>> addReportTemplateOrganization(
-        @PathVariable("reportTemplateId") String reportTemplateId,
-        @RequestBody(required = false) Map<String, Object> rawBody
-    ) {
-        String normalizedReportTemplateId = normalizeText(reportTemplateId);
-        if (normalizedReportTemplateId == null) {
-            return badRequest("Параметр reportTemplateId обязателен");
-        }
-        if (!normalizedReportTemplateId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
-            return badRequest("Параметр reportTemplateId должен быть UUID");
-        }
-        Map<String, Object> body = normalizeRequestBody(rawBody);
-        String organUnitId = normalizeText(body.get("organUnitId"));
-        if (organUnitId == null) {
-            return badRequest("Параметр organUnitId обязателен");
-        }
-        if (!organUnitId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
-            return badRequest("Параметр organUnitId должен быть UUID");
-        }
-        try {
-            Integer templateExists = jdbcTemplate.queryForObject(
-                """
-                select count(*)::int
-                from public.report_templates rt
-                where rt.id = ?::uuid
-                  and rt.deleted = false
-                """,
-                Integer.class,
-                normalizedReportTemplateId
-            );
-            if ((templateExists == null ? 0 : templateExists) == 0) {
-                return badRequest("Шаблон отчета не найден");
-            }
-            List<Map<String, Object>> organizations = jdbcTemplate.queryForList(
-                """
-                select
-                  ou.id::text as organ_unit_id,
-                  coalesce(ou.sh_name, '') as organ_unit_name
-                from party.organ_unit ou
-                where ou.id = ?::uuid
-                  and ou.deleted = false
-                limit 1
-                """,
-                organUnitId
-            );
-            if (organizations.isEmpty()) {
-                return badRequest("Организация не найдена");
-            }
-            Map<String, Object> organization = organizations.get(0);
-            int insertedCount = jdbcTemplate.update(
-                """
-                insert into public.report_template_organizations(report_template_id, claim_organization_id)
-                select ?::uuid, ?::uuid
-                where not exists (
-                  select 1
-                  from public.report_template_organizations rto
-                  where rto.report_template_id = ?::uuid
-                    and rto.claim_organization_id = ?::uuid
-                )
-                """,
-                normalizedReportTemplateId,
-                organUnitId,
-                normalizedReportTemplateId,
-                organUnitId
-            );
-            if (insertedCount == 0) {
-                return badRequest("Связь Отчет-Организация уже существует");
-            }
-            return ResponseEntity.ok(mapOf(
-                "ok", true,
-                "item", mapOf(
-                    "organUnitId", organization.get("organ_unit_id"),
-                    "organUnitName", organization.get("organ_unit_name")
-                )
-            ));
-        } catch (Exception exception) {
-            return serverError(exception, "Внутренняя ошибка добавления");
-        }
-    }
-
-    @PostMapping("/report-templates/{reportTemplateId}/organizations")
-    public ResponseEntity<Map<String, Object>> addReportTemplateOrganizationAlias(
-        @PathVariable("reportTemplateId") String reportTemplateId,
-        @RequestBody(required = false) Map<String, Object> rawBody
-    ) {
-        return addReportTemplateOrganization(reportTemplateId, rawBody);
-    }
-
-    @PostMapping("/report-template/{reportTemplateId}/access-groups")
-    public ResponseEntity<Map<String, Object>> addReportTemplateAccessGroup(
-        @PathVariable("reportTemplateId") String reportTemplateId,
-        @RequestBody(required = false) Map<String, Object> rawBody
-    ) {
-        String normalizedReportTemplateId = normalizeText(reportTemplateId);
-        if (normalizedReportTemplateId == null) {
-            return badRequest("Параметр reportTemplateId обязателен");
-        }
-        if (!normalizedReportTemplateId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
-            return badRequest("Параметр reportTemplateId должен быть UUID");
-        }
-        Map<String, Object> body = normalizeRequestBody(rawBody);
-        String codeAccess = normalizeText(body.get("codeAccess"));
-        if (codeAccess == null) {
-            return badRequest("Параметр codeAccess обязателен");
-        }
-        if (!codeAccess.matches("^GRP(0[1-9]|10)$")) {
-            return badRequest("Параметр codeAccess должен быть в диапазоне GRP01-GRP10");
-        }
-        try {
-            Integer templateExists = jdbcTemplate.queryForObject(
-                """
-                select count(*)::int
-                from public.report_templates rt
-                where rt.id = ?::uuid
-                  and rt.deleted = false
-                """,
-                Integer.class,
-                normalizedReportTemplateId
-            );
-            if ((templateExists == null ? 0 : templateExists) == 0) {
-                return badRequest("Шаблон отчета не найден");
-            }
-            int insertedCount = jdbcTemplate.update(
-                """
-                insert into public.report_access_group(report_template_id, code_access)
-                select ?::uuid, ?
-                where not exists (
-                  select 1
-                  from public.report_access_group rag
-                  where rag.report_template_id = ?::uuid
-                    and rag.code_access = ?
-                )
-                """,
-                normalizedReportTemplateId,
-                codeAccess,
-                normalizedReportTemplateId,
-                codeAccess
-            );
-            if (insertedCount == 0) {
-                return badRequest("Связь Отчет-Группа доступа уже существует");
-            }
-            return ResponseEntity.ok(mapOf(
-                "ok", true,
-                "item", mapOf(
-                    "codeAccess", codeAccess
-                )
-            ));
-        } catch (Exception exception) {
-            return serverError(exception, "Внутренняя ошибка добавления");
-        }
-    }
-
-    @PostMapping("/report-templates/{reportTemplateId}/access-groups")
-    public ResponseEntity<Map<String, Object>> addReportTemplateAccessGroupAlias(
-        @PathVariable("reportTemplateId") String reportTemplateId,
-        @RequestBody(required = false) Map<String, Object> rawBody
-    ) {
-        return addReportTemplateAccessGroup(reportTemplateId, rawBody);
-    }
-
-    @PostMapping("/report-template/sql/execute-check")
-    public ResponseEntity<Map<String, Object>> executeCheckReportTemplateSql(
-        @RequestBody(required = false) Map<String, Object> rawBody
-    ) {
-        Map<String, Object> body = normalizeRequestBody(rawBody);
-        String sqlQuery = normalizeText(body.get("sqlQuery"));
-        String validationError = validateReportTemplateSqlText(sqlQuery);
-        if (validationError != null) {
-            return badRequest(validationError);
-        }
-        String reportTemplateId = normalizeText(body.get("reportTemplateId"));
-        if (reportTemplateId == null) {
-            return badRequest("Параметр reportTemplateId обязателен");
-        }
-        if (!reportTemplateId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
-            return badRequest("Параметр reportTemplateId должен быть UUID");
-        }
-        Integer numberDays = getReportTemplateNumberDays(reportTemplateId);
-        if (numberDays == null) {
-            return badRequest("Шаблон отчета не найден");
-        }
-        String claimOrganizationId = normalizeText(body.get("claimOrganizationId"));
-        if (
-            claimOrganizationId != null &&
-            !claimOrganizationId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
-        ) {
-            return badRequest("Параметр claimOrganizationId должен быть UUID");
-        }
-        String reportId = normalizeText(body.get("reportId"));
-        if (
-            reportId != null &&
-            !reportId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
-        ) {
-            return badRequest("Параметр reportId должен быть UUID");
-        }
-        List<String> roleNames = normalizeRoleNames(body.get("roleNames"));
-        String method = getReportTemplateMethod(reportTemplateId);
-        if ("HAND".equalsIgnoreCase(method) && roleNames.isEmpty()) {
-            return badRequest("Для отчетов с method=HAND параметр roleNames обязателен");
-        }
-        String sqlForExecution = toReportTemplateCheckSql(
-            sqlQuery,
-            reportTemplateId,
-            numberDays,
-            null,
-            null,
-            claimOrganizationId,
-            reportId,
-            roleNames
-        );
-        String countSql = "select count(*)::bigint as total_count from (" + sqlForExecution + ") report_sql_check";
-
-        try {
-            long startedAtNanos = System.nanoTime();
-            Long selectedRows = jdbcTemplate.queryForObject(countSql, Long.class);
-            long elapsedMs = (System.nanoTime() - startedAtNanos) / 1_000_000L;
-            return ResponseEntity.ok(mapOf(
-                "ok", true,
-                "executionMs", elapsedMs,
-                "executionTime", formatExecutionTimeMinutesSecondsMilliseconds(elapsedMs),
-                "selectedRows", selectedRows == null ? 0L : selectedRows
-            ));
-        } catch (Exception exception) {
-            return sqlValidationErrorResponse(exception, sqlQuery, "Ошибка выполнения SQL-скрипта");
-        }
-    }
-
-    @PostMapping("/report-templates/sql/execute-check")
-    public ResponseEntity<Map<String, Object>> executeCheckReportTemplatesSqlAlias(
-        @RequestBody(required = false) Map<String, Object> rawBody
-    ) {
-        return executeCheckReportTemplateSql(rawBody);
-    }
-
-    @PostMapping("/report-template/sql/results")
-    public ResponseEntity<Map<String, Object>> reportTemplateSqlResults(
-        @RequestBody(required = false) Map<String, Object> rawBody
-    ) {
-        Map<String, Object> body = normalizeRequestBody(rawBody);
-        String reportTemplateId = normalizeText(body.get("reportTemplateId"));
-        if (reportTemplateId == null) {
-            return badRequest("Параметр reportTemplateId обязателен");
-        }
-        if (!reportTemplateId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
-            return badRequest("Параметр reportTemplateId должен быть UUID");
-        }
-
-        ParseResult limitParsed = parsePositiveInteger(body.get("limit"), 500, "limit");
-        if (limitParsed.error() != null) {
-            return badRequest(limitParsed.error());
-        }
-        ParseResult offsetParsed = parsePositiveInteger(body.get("offset"), 1, "offset");
-        if (offsetParsed.error() != null) {
-            return badRequest(offsetParsed.error());
-        }
-
-        int limit = Math.min(limitParsed.value() == null ? 500 : limitParsed.value(), 500);
-        int page = offsetParsed.value() == null ? 1 : offsetParsed.value();
-        int sqlOffset = (page - 1) * limit;
-
-        String savedSqlQuery = "";
-        try {
-            List<Map<String, Object>> templates = jdbcTemplate.queryForList(
-                """
-                select
-                  rt.sql_query as sql_query,
-                  coalesce(rt.number_days, 0)::int as number_days,
-                  upper(coalesce(rt.method, 'AUTO')) as method
-                from public.report_templates rt
-                where rt.id = ?::uuid
-                  and rt.deleted = false
-                """,
-                reportTemplateId
-            );
-            if (templates.isEmpty()) {
-                return badRequest("Шаблон отчета не найден");
-            }
-            Map<String, Object> template = templates.get(0);
-            savedSqlQuery = template.get("sql_query") == null ? null : String.valueOf(template.get("sql_query"));
-            String validationError = validateReportTemplateSqlText(savedSqlQuery);
-            if (validationError != null) {
-                return badRequest(validationError);
-            }
-            Integer numberDays = template.get("number_days") instanceof Number value
-                ? value.intValue()
-                : 0;
-            String claimOrganizationId = normalizeText(body.get("claimOrganizationId"));
-            if (
-                claimOrganizationId != null &&
-                !claimOrganizationId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
-            ) {
-                return badRequest("Параметр claimOrganizationId должен быть UUID");
-            }
-            String reportId = normalizeText(body.get("reportId"));
-            if (
-                reportId != null &&
-                !reportId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
-            ) {
-                return badRequest("Параметр reportId должен быть UUID");
-            }
-            List<String> roleNames = normalizeRoleNames(body.get("roleNames"));
-            String method = normalizeText(template.get("method"));
-            if ("HAND".equalsIgnoreCase(method) && roleNames.isEmpty()) {
-                return badRequest("Для отчетов с method=HAND параметр roleNames обязателен");
-            }
-            String sqlForExecution = toReportTemplateCheckSql(
-                savedSqlQuery,
-                reportTemplateId,
-                numberDays,
-                null,
-                null,
-                claimOrganizationId,
-                reportId,
-                roleNames
-            );
-            String countSql = "select count(*)::bigint as total_count from (" + sqlForExecution + ") report_sql_results";
-            String pagedSql = "select * from (" + sqlForExecution + ") report_sql_results limit ? offset ?";
-
-            long startedAtNanos = System.nanoTime();
-            Long totalRows = jdbcTemplate.queryForObject(countSql, Long.class);
-            List<String> columns = new ArrayList<>();
-            List<Map<String, Object>> rows = jdbcTemplate.query(
-                pagedSql,
-                (resultSet) -> {
-                    List<Map<String, Object>> extractedRows = new ArrayList<>();
-                    int columnCount = resultSet.getMetaData().getColumnCount();
-                    if (columns.isEmpty()) {
-                        for (int index = 1; index <= columnCount; index += 1) {
-                            columns.add(resultSet.getMetaData().getColumnLabel(index));
-                        }
-                    }
-                    while (resultSet.next()) {
-                        LinkedHashMap<String, Object> mappedRow = new LinkedHashMap<>();
-                        for (int index = 1; index <= columnCount; index += 1) {
-                            String columnName = columns.get(index - 1);
-                            mappedRow.put(columnName, resultSet.getObject(index));
-                        }
-                        extractedRows.add(mappedRow);
-                    }
-                    return extractedRows;
-                },
-                limit,
-                sqlOffset
-            );
-            long elapsedMs = (System.nanoTime() - startedAtNanos) / 1_000_000L;
-            long total = totalRows == null ? 0L : totalRows;
-            boolean hasMore = sqlOffset + rows.size() < total;
-
-            return ResponseEntity.ok(mapOf(
-                "ok", true,
-                "columns", columns,
-                "rows", rows,
-                "totalRows", total,
-                "hasMore", hasMore,
-                "offset", page,
-                "limit", limit,
-                "executionMs", elapsedMs,
-                "executionTime", formatExecutionTimeMinutesSecondsMilliseconds(elapsedMs)
-            ));
-        } catch (Exception exception) {
-            return sqlValidationErrorResponse(exception, savedSqlQuery, "Ошибка выполнения SQL-скрипта");
-        }
-    }
-
-    @PostMapping("/report-templates/sql/results")
-    public ResponseEntity<Map<String, Object>> reportTemplatesSqlResultsAlias(
-        @RequestBody(required = false) Map<String, Object> rawBody
-    ) {
-        return reportTemplateSqlResults(rawBody);
-    }
-
-    @PostMapping("/report-template/execute")
-    public ResponseEntity<?> executeReportTemplate(
-        @RequestBody(required = false) Map<String, Object> rawBody
-    ) {
-        return reportTemplateExportService.executeReportTemplate(
-            rawBody,
-            this::reportTemplateExcelPreviewInternal,
-            this::reportTemplateExcelExportInternal
-        );
-    }
-
-    @PostMapping("/report-templates/execute")
-    public ResponseEntity<?> executeReportTemplateAlias(
-        @RequestBody(required = false) Map<String, Object> rawBody
-    ) {
-        return executeReportTemplate(rawBody);
-    }
-
-    @PostMapping("/report-template/excel-preview")
-    public ResponseEntity<?> reportTemplateExcelPreview(
-        @RequestBody(required = false) Map<String, Object> rawBody
-    ) {
-        return reportTemplateExportService.reportTemplateExcelPreview(
-            rawBody,
-            this::reportTemplateExcelPreviewInternal
-        );
-    }
-
-    private ResponseEntity<?> reportTemplateExcelPreviewInternal(
+    protected ResponseEntity<?> reportTemplateExcelPreviewInternal(
         Map<String, Object> rawBody
     ) {
         Map<String, Object> body = normalizeRequestBody(rawBody);
@@ -2700,27 +2640,18 @@ public class ApiController {
 
         String savedSqlQuery = "";
         try {
-            List<Map<String, Object>> templates = jdbcTemplate.queryForList(
-                """
-                select
-                  rt.sql_query as sql_query,
-                  coalesce(rt.number_days, 0)::int as number_days,
-                  upper(coalesce(rt.method, 'AUTO')) as method,
-                  coalesce(nullif(trim(rt.output_file_name), ''), 'report-preview') as output_file_name,
-                  coalesce(nullif(trim(rt.name), ''), 'Отчет') as report_name,
-                  rt.report_info::text as report_info,
-                  rt.report_logo as report_logo
-                from public.report_templates rt
-                where rt.id = ?::uuid
-                  and rt.deleted = false
-                """,
-                reportTemplateId
+            Map<String, Object> template = reportTemplateRepository.findTemplateExcelMetaById(
+                reportTemplateId,
+                "report-preview",
+                "xlsx"
             );
-            if (templates.isEmpty()) {
+            if (template == null) {
                 return badRequest("Шаблон отчета не найден");
             }
-            Map<String, Object> template = templates.get(0);
             savedSqlQuery = template.get("sql_query") == null ? null : String.valueOf(template.get("sql_query"));
+            if (savedSqlQuery == null || savedSqlQuery.isBlank()) {
+                return badRequest("Сохраненный SQL-скрипт пустой");
+            }
             String validationError = validateReportTemplateSqlText(savedSqlQuery);
             if (validationError != null) {
                 return badRequest(validationError);
@@ -2770,7 +2701,7 @@ public class ApiController {
             String countSql = "select count(*)::bigint as total_count from (" + sqlForExecution + ") report_excel_preview";
             String pagedSql = "select * from (" + sqlForExecution + ") report_excel_preview limit " + limit;
 
-            Long totalRows = jdbcTemplate.queryForObject(countSql, Long.class);
+            Long totalRows = reportTemplateRepository.queryLong(countSql);
             List<ReportFieldConfig> visibleFields = resolveVisibleReportFields(reportInfo);
             if (visibleFields.isEmpty()) {
                 return badRequest("В report_info должен быть хотя бы один видимый параметр поля");
@@ -2804,24 +2735,7 @@ public class ApiController {
         }
     }
 
-    @PostMapping("/report-templates/excel-preview")
-    public ResponseEntity<?> reportTemplatesExcelPreviewAlias(
-        @RequestBody(required = false) Map<String, Object> rawBody
-    ) {
-        return reportTemplateExcelPreview(rawBody);
-    }
-
-    @PostMapping("/report-template/excel")
-    public ResponseEntity<?> reportTemplateExcelExport(
-        @RequestBody(required = false) Map<String, Object> rawBody
-    ) {
-        return reportTemplateExportService.reportTemplateExcelExport(
-            rawBody,
-            this::reportTemplateExcelExportInternal
-        );
-    }
-
-    private ResponseEntity<?> reportTemplateExcelExportInternal(
+    protected ResponseEntity<?> reportTemplateExcelExportInternal(
         Map<String, Object> rawBody
     ) {
         Map<String, Object> body = normalizeRequestBody(rawBody);
@@ -2835,28 +2749,18 @@ public class ApiController {
 
         String savedSqlQuery = "";
         try {
-            List<Map<String, Object>> templates = jdbcTemplate.queryForList(
-                """
-                select
-                  rt.sql_query as sql_query,
-                  coalesce(rt.number_days, 0)::int as number_days,
-                  upper(coalesce(rt.method, 'AUTO')) as method,
-                  coalesce(nullif(trim(rt.output_file_name), ''), 'report') as output_file_name,
-                  coalesce(nullif(trim(rt.output_file_type), ''), 'xlsx') as output_file_type,
-                  coalesce(nullif(trim(rt.name), ''), 'Отчет') as report_name,
-                  rt.report_info::text as report_info,
-                  rt.report_logo as report_logo
-                from public.report_templates rt
-                where rt.id = ?::uuid
-                  and rt.deleted = false
-                """,
-                reportTemplateId
+            Map<String, Object> template = reportTemplateRepository.findTemplateExcelMetaById(
+                reportTemplateId,
+                "report",
+                "xlsx"
             );
-            if (templates.isEmpty()) {
+            if (template == null) {
                 return badRequest("Шаблон отчета не найден");
             }
-            Map<String, Object> template = templates.get(0);
             savedSqlQuery = template.get("sql_query") == null ? null : String.valueOf(template.get("sql_query"));
+            if (savedSqlQuery == null || savedSqlQuery.isBlank()) {
+                return badRequest("Сохраненный SQL-скрипт пустой");
+            }
             String validationError = validateReportTemplateSqlText(savedSqlQuery);
             if (validationError != null) {
                 return badRequest(validationError);
@@ -2938,292 +2842,6 @@ public class ApiController {
         }
     }
 
-    @PostMapping("/report-templates/excel")
-    public ResponseEntity<?> reportTemplatesExcelExportAlias(
-        @RequestBody(required = false) Map<String, Object> rawBody
-    ) {
-        return reportTemplateExcelExport(rawBody);
-    }
-
-    @PatchMapping("/report-template/{reportTemplateId}/sql")
-    public ResponseEntity<Map<String, Object>> updateReportTemplateSql(
-        @PathVariable("reportTemplateId") String reportTemplateId,
-        @RequestBody(required = false) Map<String, Object> rawBody
-    ) {
-        String normalizedReportTemplateId = normalizeText(reportTemplateId);
-        if (normalizedReportTemplateId == null) {
-            return badRequest("Параметр reportTemplateId обязателен");
-        }
-        if (!normalizedReportTemplateId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
-            return badRequest("Параметр reportTemplateId должен быть UUID");
-        }
-
-        Map<String, Object> body = normalizeRequestBody(rawBody);
-        String sqlQuery = normalizeText(body.get("sqlQuery"));
-        String validationError = validateReportTemplateSqlText(sqlQuery);
-        if (validationError != null) {
-            return badRequest(validationError);
-        }
-        Integer numberDays = getReportTemplateNumberDays(normalizedReportTemplateId);
-        if (numberDays == null) {
-            return badRequest("Шаблон отчета не найден");
-        }
-        String claimOrganizationId = normalizeText(body.get("claimOrganizationId"));
-        if (
-            claimOrganizationId != null &&
-            !claimOrganizationId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
-        ) {
-            return badRequest("Параметр claimOrganizationId должен быть UUID");
-        }
-        String reportId = normalizeText(body.get("reportId"));
-        if (
-            reportId != null &&
-            !reportId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")
-        ) {
-            return badRequest("Параметр reportId должен быть UUID");
-        }
-        List<String> roleNames = normalizeRoleNames(body.get("roleNames"));
-        String method = getReportTemplateMethod(normalizedReportTemplateId);
-        if ("HAND".equalsIgnoreCase(method) && roleNames.isEmpty()) {
-            return badRequest("Для отчетов с method=HAND параметр roleNames обязателен");
-        }
-        String sqlForExplain = toReportTemplateCheckSql(
-            sqlQuery,
-            normalizedReportTemplateId,
-            numberDays,
-            null,
-            null,
-            claimOrganizationId,
-            reportId,
-            roleNames
-        );
-
-        try {
-            jdbcTemplate.queryForList("explain " + sqlForExplain);
-            int updated = jdbcTemplate.update(
-                """
-                update public.report_templates
-                set sql_query = ?
-                where id = ?::uuid
-                  and deleted = false
-                """,
-                sqlQuery,
-                normalizedReportTemplateId
-            );
-            if (updated == 0) {
-                return badRequest("Шаблон отчета не найден");
-            }
-            return ResponseEntity.ok(mapOf(
-                "ok", true,
-                "message", "SQL-скрипт сохранен",
-                "item", mapOf(
-                    "reportTemplateId", normalizedReportTemplateId,
-                    "sqlQuery", sqlQuery
-                )
-            ));
-        } catch (Exception exception) {
-            return sqlValidationErrorResponse(exception, sqlQuery, "Ошибка сохранения SQL-скрипта");
-        }
-    }
-
-    @PatchMapping("/report-templates/{reportTemplateId}/sql")
-    public ResponseEntity<Map<String, Object>> updateReportTemplatesSqlAlias(
-        @PathVariable("reportTemplateId") String reportTemplateId,
-        @RequestBody(required = false) Map<String, Object> rawBody
-    ) {
-        return updateReportTemplateSql(reportTemplateId, rawBody);
-    }
-
-    @GetMapping("/report-template/{reportTemplateId}/template-settings")
-    public ResponseEntity<Map<String, Object>> reportTemplateSettingsGet(
-        @PathVariable("reportTemplateId") String reportTemplateId
-    ) {
-        String normalizedReportTemplateId = normalizeText(reportTemplateId);
-        if (normalizedReportTemplateId == null) {
-            return badRequest("Параметр reportTemplateId обязателен");
-        }
-        if (!normalizedReportTemplateId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
-            return badRequest("Параметр reportTemplateId должен быть UUID");
-        }
-
-        try {
-            List<Map<String, Object>> templates = jdbcTemplate.queryForList(
-                """
-                select
-                  rt.id::text as report_template_id,
-                  rt.name as name,
-                  rt.report_info::text as report_info,
-                  jsonb_pretty(rt.report_info) as report_info_pretty,
-                  encode(rt.report_logo, 'base64') as report_logo_base64,
-                  case
-                    when rt.report_logo is null then null
-                    when substring(rt.report_logo from 1 for 8) = decode('89504E470D0A1A0A', 'hex') then 'image/png'
-                    when substring(rt.report_logo from 1 for 3) = decode('FFD8FF', 'hex') then 'image/jpeg'
-                    when substring(rt.report_logo from 1 for 6) = decode('474946383761', 'hex')
-                      or substring(rt.report_logo from 1 for 6) = decode('474946383961', 'hex')
-                      then 'image/gif'
-                    when substring(rt.report_logo from 9 for 4) = decode('57454250', 'hex') then 'image/webp'
-                    else 'application/octet-stream'
-                  end as report_logo_mime_type
-                from public.report_templates rt
-                where rt.id = ?::uuid
-                  and rt.deleted = false
-                """,
-                normalizedReportTemplateId
-            );
-            if (templates.isEmpty()) {
-                return badRequest("Шаблон отчета не найден");
-            }
-            Map<String, Object> template = templates.get(0);
-            String reportInfoText = normalizeText(template.get("report_info"));
-            Object reportInfo = null;
-            if (reportInfoText != null) {
-                reportInfo = objectMapper.readValue(reportInfoText, new TypeReference<Map<String, Object>>() {});
-            }
-            String reportInfoJson = normalizeText(template.get("report_info_pretty"));
-            return ResponseEntity.ok(mapOf(
-                "ok", true,
-                "item", mapOf(
-                    "reportTemplateId", template.get("report_template_id"),
-                    "name", template.get("name"),
-                    "reportInfo", reportInfo,
-                    "reportInfoJson", reportInfoJson,
-                    "reportLogoBase64", template.get("report_logo_base64"),
-                    "reportLogoMimeType", template.get("report_logo_mime_type")
-                )
-            ));
-        } catch (Exception exception) {
-            return serverError(exception, "Ошибка получения настроек шаблона отчета");
-        }
-    }
-
-    @GetMapping("/report-templates/{reportTemplateId}/template-settings")
-    public ResponseEntity<Map<String, Object>> reportTemplatesSettingsGetAlias(
-        @PathVariable("reportTemplateId") String reportTemplateId
-    ) {
-        return reportTemplateSettingsGet(reportTemplateId);
-    }
-
-    @PatchMapping("/report-template/{reportTemplateId}/template-settings")
-    public ResponseEntity<Map<String, Object>> updateReportTemplateSettings(
-        @PathVariable("reportTemplateId") String reportTemplateId,
-        @RequestBody(required = false) Map<String, Object> rawBody
-    ) {
-        String normalizedReportTemplateId = normalizeText(reportTemplateId);
-        if (normalizedReportTemplateId == null) {
-            return badRequest("Параметр reportTemplateId обязателен");
-        }
-        if (!normalizedReportTemplateId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
-            return badRequest("Параметр reportTemplateId должен быть UUID");
-        }
-
-        Map<String, Object> body = normalizeRequestBody(rawBody);
-        Object reportInfoRaw = body.get("reportInfo");
-        if (!(reportInfoRaw instanceof Map<?, ?> reportInfoMap)) {
-            return badRequest("Параметр reportInfo обязателен и должен быть объектом");
-        }
-        Map<String, Object> sanitizedReportInfo = sanitizeReportInfoBeforeSave(reportInfoMap);
-        String reportInfoJson;
-        try {
-            reportInfoJson = objectMapper.writeValueAsString(sanitizedReportInfo);
-        } catch (Exception exception) {
-            return badRequest("Параметр reportInfo должен быть корректным JSON-объектом");
-        }
-
-        String reportLogoBase64 = normalizeText(body.get("reportLogoBase64"));
-        boolean clearReportLogo = Boolean.TRUE.equals(body.get("clearReportLogo"))
-            || "true".equalsIgnoreCase(String.valueOf(body.get("clearReportLogo")));
-        boolean shouldUpdateLogo = clearReportLogo || body.containsKey("reportLogoBase64");
-        byte[] reportLogoBytes = null;
-        if (!clearReportLogo && reportLogoBase64 != null) {
-            try {
-                reportLogoBytes = decodeBase64Lenient(reportLogoBase64);
-            } catch (IllegalArgumentException exception) {
-                return badRequest("Параметр reportLogoBase64 должен быть корректной base64-строкой");
-            }
-        }
-
-        try {
-            int updated;
-            if (shouldUpdateLogo) {
-                updated = jdbcTemplate.update(
-                    """
-                    update public.report_templates
-                    set report_info = ?::jsonb,
-                        report_logo = ?
-                    where id = ?::uuid
-                      and deleted = false
-                    """,
-                    reportInfoJson,
-                    reportLogoBytes,
-                    normalizedReportTemplateId
-                );
-            } else {
-                updated = jdbcTemplate.update(
-                    """
-                    update public.report_templates
-                    set report_info = ?::jsonb
-                    where id = ?::uuid
-                      and deleted = false
-                    """,
-                    reportInfoJson,
-                    normalizedReportTemplateId
-                );
-            }
-            if (updated == 0) {
-                return badRequest("Шаблон отчета не найден");
-            }
-            return ResponseEntity.ok(mapOf(
-                "ok", true,
-                "message", "Настройки шаблона отчета сохранены",
-                "item", mapOf(
-                    "reportTemplateId", normalizedReportTemplateId,
-                    "reportInfo", sanitizedReportInfo,
-                    "reportInfoJson", objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(sanitizedReportInfo),
-                    "reportLogoBase64", shouldUpdateLogo ? reportLogoBase64 : null
-                )
-            ));
-        } catch (Exception exception) {
-            return serverError(exception, "Ошибка сохранения настроек шаблона отчета");
-        }
-    }
-
-    private Map<String, Object> sanitizeReportInfoBeforeSave(Map<?, ?> reportInfoMap) {
-        LinkedHashMap<String, Object> sanitized = new LinkedHashMap<>();
-        for (Map.Entry<?, ?> entry : reportInfoMap.entrySet()) {
-            String key = String.valueOf(entry.getKey());
-            if ("fields".equals(key) && entry.getValue() instanceof Collection<?> fieldsCollection) {
-                List<Map<String, Object>> filteredFields = new ArrayList<>();
-                for (Object fieldRaw : fieldsCollection) {
-                    if (!(fieldRaw instanceof Map<?, ?> fieldMap)) {
-                        continue;
-                    }
-                    boolean reportVisible = toBooleanOrDefault(fieldMap.get("reportVisible"), true);
-                    Integer normalizedOrderNumber = normalizePositiveOrderNumber(
-                        fieldMap.containsKey("fieldOrderNumber")
-                            ? fieldMap.get("fieldOrderNumber")
-                            : fieldMap.get("fielOrderNumber")
-                    );
-                    if (reportVisible && normalizedOrderNumber == null) {
-                        continue;
-                    }
-                    LinkedHashMap<String, Object> normalizedField = new LinkedHashMap<>();
-                    for (Map.Entry<?, ?> fieldEntry : fieldMap.entrySet()) {
-                        normalizedField.put(String.valueOf(fieldEntry.getKey()), fieldEntry.getValue());
-                    }
-                    normalizedField.remove("fielOrderNumber");
-                    normalizedField.put("reportVisible", reportVisible);
-                    normalizedField.put("fieldOrderNumber", reportVisible ? normalizedOrderNumber : "");
-                    filteredFields.add(normalizedField);
-                }
-                sanitized.put(key, filteredFields);
-                continue;
-            }
-            sanitized.put(key, entry.getValue());
-        }
-        return sanitized;
-    }
-
     private boolean toBooleanOrDefault(Object rawValue, boolean fallbackValue) {
         if (rawValue instanceof Boolean booleanValue) {
             return booleanValue;
@@ -3259,34 +2877,9 @@ public class ApiController {
         return normalized * 256;
     }
 
-    private byte[] decodeBase64Lenient(String base64Value) {
-        String normalized = normalizeText(base64Value);
-        if (normalized == null) {
-            throw new IllegalArgumentException("empty base64");
-        }
-        String compact = normalized.replaceAll("\\s+", "");
-        if (compact.isEmpty()) {
-            throw new IllegalArgumentException("empty base64");
-        }
-        try {
-            return Base64.getDecoder().decode(compact);
-        } catch (IllegalArgumentException exception) {
-            return Base64.getUrlDecoder().decode(compact);
-        }
-    }
-
-    @PatchMapping("/report-templates/{reportTemplateId}/template-settings")
-    public ResponseEntity<Map<String, Object>> updateReportTemplatesSettingsAlias(
-        @PathVariable("reportTemplateId") String reportTemplateId,
-        @RequestBody(required = false) Map<String, Object> rawBody
-    ) {
-        return updateReportTemplateSettings(reportTemplateId, rawBody);
-    }
-
-    @PostMapping("/relation/{employeeId}")
     public ResponseEntity<Map<String, Object>> relationsPost(
-        @PathVariable("employeeId") String employeeId,
-        @RequestBody(required = false) Map<String, Object> rawBody
+        String employeeId,
+        Map<String, Object> rawBody
     ) {
         Map<String, Object> body = normalizeRequestBody(rawBody);
         String arrayParamError = hasArrayValue(body, Set.of("sorts"));
@@ -3404,9 +2997,8 @@ public class ApiController {
         }
     }
 
-    @PostMapping("/relations")
     public ResponseEntity<Map<String, Object>> relationsPostAll(
-        @RequestBody(required = false) Map<String, Object> rawBody
+        Map<String, Object> rawBody
     ) {
         Map<String, Object> body = normalizeRequestBody(rawBody);
         String arrayParamError = hasArrayValue(body, Set.of("sorts"));
@@ -3533,8 +3125,7 @@ public class ApiController {
         }
     }
 
-    @PostMapping("/relations/export")
-    public ResponseEntity<?> relationsExport(@RequestBody(required = false) Map<String, Object> rawBody) {
+    public ResponseEntity<?> relationsExport(Map<String, Object> rawBody) {
         Map<String, Object> body = normalizeRequestBody(rawBody);
         String arrayParamError = hasArrayValue(body, Set.of("sorts", "columns"));
         if (arrayParamError != null) {
@@ -3662,8 +3253,7 @@ public class ApiController {
         }
     }
 
-    @PostMapping("/relation")
-    public ResponseEntity<Map<String, Object>> relationCreate(@RequestBody(required = false) Map<String, Object> rawBody) {
+    public ResponseEntity<Map<String, Object>> relationCreate(Map<String, Object> rawBody) {
         Map<String, Object> body = normalizeRequestBody(rawBody);
         String arrayParamError = hasArrayValue(body, Set.of("sorts"));
         if (arrayParamError != null) {
@@ -3798,10 +3388,9 @@ public class ApiController {
         }
     }
 
-    @PatchMapping("/relation/{relationId}")
     public ResponseEntity<Map<String, Object>> relationUpdate(
-        @PathVariable("relationId") String relationId,
-        @RequestBody(required = false) Map<String, Object> rawBody
+        String relationId,
+        Map<String, Object> rawBody
     ) {
         String normalizedRelationId = normalizeText(relationId);
         if (normalizedRelationId == null) {
@@ -3952,8 +3541,7 @@ public class ApiController {
         }
     }
 
-    @DeleteMapping("/relation/{relationId}")
-    public ResponseEntity<Map<String, Object>> relationDelete(@PathVariable("relationId") String relationId) {
+    public ResponseEntity<Map<String, Object>> relationDelete(String relationId) {
         String normalizedRelationId = normalizeText(relationId);
         if (normalizedRelationId == null) {
             return badRequest("Параметр relationId обязателен");
@@ -3983,737 +3571,105 @@ public class ApiController {
         }
     }
 
-    @PatchMapping("/employee/{employeeId}")
-    public ResponseEntity<Map<String, Object>> employeeUpdate(
-        @PathVariable("employeeId") String employeeIdRaw,
-        @RequestBody(required = false) Map<String, Object> rawBody
+
+    public ResponseEntity<Map<String, Object>> organizationDelete(
+        String organUnitIdRaw
     ) {
-        String employeeId = normalizeText(employeeIdRaw);
-        if (employeeId == null) {
-            return badRequest("Параметр employeeId обязателен");
+        String organUnitId = normalizeText(organUnitIdRaw);
+        if (organUnitId == null) {
+            return badRequest("Параметр organUnitId обязателен");
         }
-        if (!employeeId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
-            return badRequest("Параметр employeeId должен быть UUID");
-        }
-
-        Map<String, Object> body = normalizeRequestBody(rawBody);
-        String surname = normalizeText(body.get("surname"));
-        String firstName = normalizeText(body.get("firstName"));
-        String middleName = normalizeText(body.get("middleName"));
-        String email = normalizeText(body.get("email"));
-        String phoneNumber = normalizeText(body.get("phoneNumber"));
-        String sapId = normalizeText(body.get("sapId"));
-        String personalNumberRaw = normalizeText(body.get("personalNumber"));
-        String status = normalizeText(body.get("status"));
-
-        if (email == null) {
-            return badRequest("Параметр email обязателен");
-        }
-        if (!email.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
-            return badRequest("Параметр email должен соответствовать шаблону email");
-        }
-        if (status == null) {
-            return badRequest("Параметр status обязателен");
-        }
-        status = status.toUpperCase(Locale.ROOT);
-        if (!ALLOWED_STATUS.contains(status)) {
-            return badRequest("Параметр status должен быть ACTIVE или INACTIVE");
+        if (!organUnitId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
+            return badRequest("Параметр organUnitId должен быть UUID");
         }
 
         try {
-            Integer duplicateEmailCount = jdbcTemplate.queryForObject(
+            Integer existingOrganizationCount = jdbcTemplate.queryForObject(
                 """
                 select count(*)::int
-                from party.employee e
-                where e.deleted = false
-                  and lower(e.email) = lower(?)
-                  and e.id <> ?::uuid
+                from party.organ_unit ou
+                where ou.id = ?::uuid
+                  and ou.deleted = false
                 """,
                 Integer.class,
-                email,
-                employeeId
+                organUnitId
             );
-            if (duplicateEmailCount != null && duplicateEmailCount > 0) {
-                return ResponseEntity.status(HttpStatus.CONFLICT).body(mapOf(
-                    "ok", false,
-                    "error", "Указанный адрес электронной почты уже используется другим сотрудником"
-                ));
-            }
-        } catch (Exception exception) {
-            return serverError(exception, "Внутренняя ошибка проверки email");
-        }
-
-        if (sapId != null) {
-            if (!sapId.matches("^\\d{1,10}$")) {
-                return badRequest("Параметр sapId должен содержать только цифры (до 10 символов)");
-            }
-        }
-        if (phoneNumber != null) {
-            if (!phoneNumber.matches("^[0-9()+-]+$")) {
-                return badRequest("Параметр phoneNumber может содержать только цифры и символы + - ( )");
-            }
-        }
-
-        Integer personalNumber = null;
-        if (personalNumberRaw != null) {
-            if (!personalNumberRaw.matches("^\\d{1,10}$")) {
-                return badRequest("Параметр personalNumber должен содержать только цифры (до 10 символов)");
-            }
-            long parsed = Long.parseLong(personalNumberRaw);
-            if (parsed > Integer.MAX_VALUE) {
-                return badRequest("Параметр personalNumber превышает допустимое значение");
-            }
-            personalNumber = (int) parsed;
-        }
-
-        String fullName = String.join(
-            " ",
-            Arrays.asList(surname, firstName, middleName).stream()
-                .filter(value -> value != null && !value.isBlank())
-                .toList()
-        );
-        if (fullName.isBlank()) {
-            fullName = "";
-        }
-
-        try {
-            int updatedCount = jdbcTemplate.update(
-                """
-                update party.employee
-                set
-                  surname = ?,
-                  first_name = ?,
-                  middle_name = ?,
-                  full_name = coalesce(?, ''),
-                  email = ?,
-                  phone_number = ?,
-                  sap_id = ?,
-                  personal_number = ?,
-                  status = ?,
-                  updated_at = now()
-                where id = ?::uuid
-                  and deleted = false
-                """,
-                surname,
-                firstName,
-                middleName,
-                fullName,
-                email,
-                phoneNumber,
-                sapId,
-                personalNumber,
-                status,
-                employeeId
-            );
-            if (updatedCount == 0) {
+            if (existingOrganizationCount == null || existingOrganizationCount == 0) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf(
                     "ok", false,
-                    "error", "Сотрудник не найден или удален"
+                    "error", "Организация не найдена или уже удалена"
                 ));
             }
 
-            Map<String, Object> item = jdbcTemplate.queryForMap(
-                """
-                select
-                  e.id::text as id,
-                  e.full_name,
-                  e.surname,
-                  e.first_name,
-                  e.middle_name,
-                  e.email,
-                  e.phone_number,
-                  e.sap_id,
-                  e.personal_number,
-                  e.status
-                from party.employee e
-                where e.id = ?::uuid
-                  and e.deleted = false
-                limit 1
-                """,
-                employeeId
-            );
-
-            return ResponseEntity.ok(mapOf(
-                "ok", true,
-                "item", item
-            ));
-        } catch (Exception exception) {
-            return serverError(exception, "Внутренняя ошибка обновления");
-        }
-    }
-
-    @PostMapping("/employee")
-    public ResponseEntity<Map<String, Object>> employeeCreate(
-        @RequestBody(required = false) Map<String, Object> rawBody
-    ) {
-        Map<String, Object> body = normalizeRequestBody(rawBody);
-        String surname = normalizeText(body.get("surname"));
-        String firstName = normalizeText(body.get("firstName"));
-        String middleName = normalizeText(body.get("middleName"));
-        String email = normalizeText(body.get("email"));
-        String phoneNumber = normalizeText(body.get("phoneNumber"));
-        String sapId = normalizeText(body.get("sapId"));
-        String personalNumberRaw = normalizeText(body.get("personalNumber"));
-        String status = normalizeText(body.get("status"));
-
-        if (email == null) {
-            return badRequest("Параметр email обязателен");
-        }
-        if (!email.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
-            return badRequest("Параметр email должен соответствовать шаблону email");
-        }
-        if (status == null) {
-            return badRequest("Параметр status обязателен");
-        }
-        status = status.toUpperCase(Locale.ROOT);
-        if (!ALLOWED_STATUS.contains(status)) {
-            return badRequest("Параметр status должен быть ACTIVE или INACTIVE");
-        }
-        if (sapId != null && !sapId.matches("^\\d{1,10}$")) {
-            return badRequest("Параметр sapId должен содержать только цифры (до 10 символов)");
-        }
-        if (phoneNumber != null && !phoneNumber.matches("^[0-9()+-]+$")) {
-            return badRequest("Параметр phoneNumber может содержать только цифры и символы + - ( )");
-        }
-
-        Integer personalNumber = null;
-        if (personalNumberRaw != null) {
-            if (!personalNumberRaw.matches("^\\d{1,10}$")) {
-                return badRequest("Параметр personalNumber должен содержать только цифры (до 10 символов)");
-            }
-            long parsed = Long.parseLong(personalNumberRaw);
-            if (parsed > Integer.MAX_VALUE) {
-                return badRequest("Параметр personalNumber превышает допустимое значение");
-            }
-            personalNumber = (int) parsed;
-        }
-
-        String fullName = String.join(
-            " ",
-            Arrays.asList(surname, firstName, middleName).stream()
-                .filter(value -> value != null && !value.isBlank())
-                .toList()
-        );
-        if (fullName.isBlank()) {
-            fullName = "";
-        }
-
-        try {
-            Integer duplicateEmailCount = jdbcTemplate.queryForObject(
-                """
-                select count(*)::int
-                from party.employee e
-                where e.deleted = false
-                  and lower(e.email) = lower(?)
-                """,
-                Integer.class,
-                email
-            );
-            if (duplicateEmailCount != null && duplicateEmailCount > 0) {
-                return ResponseEntity.status(HttpStatus.CONFLICT).body(mapOf(
-                    "ok", false,
-                    "error", "Указанный адрес электронной почты уже используется другим сотрудником"
-                ));
+            List<OrganizationReferenceCheck> references = loadOrganizationReferenceChecks();
+            for (OrganizationReferenceCheck reference : references) {
+                String referenceSql = buildOrganizationReferenceCheckSql(reference);
+                Integer referencesCount = jdbcTemplate.queryForObject(
+                    referenceSql,
+                    Integer.class,
+                    organUnitId
+                );
+                if (referencesCount != null && referencesCount > 0) {
+                    return ResponseEntity.status(HttpStatus.CONFLICT).body(mapOf(
+                        "ok", false,
+                        "error", "Организация используется в таблице " + reference.fullTableName()
+                    ));
+                }
             }
 
-            String employeeId = jdbcTemplate.queryForObject(
+            int deletedOrganUnitCount = jdbcTemplate.update(
                 """
-                insert into party.employee (
-                  sap_id,
-                  full_name,
-                  email,
-                  personal_number,
-                  first_name,
-                  surname,
-                  middle_name,
-                  phone_number,
-                  status,
-                  deleted
-                )
-                values (?, coalesce(?, ''), ?, ?, ?, ?, ?, ?, ?, false)
-                returning id::text
-                """,
-                String.class,
-                sapId,
-                fullName,
-                email,
-                personalNumber,
-                firstName,
-                surname,
-                middleName,
-                phoneNumber,
-                status
-            );
-
-            Map<String, Object> item = jdbcTemplate.queryForMap(
-                """
-                select
-                  e.id::text as id,
-                  e.full_name,
-                  e.surname,
-                  e.first_name,
-                  e.middle_name,
-                  e.email,
-                  e.phone_number,
-                  e.sap_id,
-                  e.personal_number,
-                  e.status
-                from party.employee e
-                where e.id = ?::uuid
-                  and e.deleted = false
-                limit 1
-                """,
-                employeeId
-            );
-
-            return ResponseEntity.status(HttpStatus.CREATED).body(mapOf(
-                "ok", true,
-                "item", item
-            ));
-        } catch (Exception exception) {
-            return serverError(exception, "Внутренняя ошибка создания");
-        }
-    }
-
-    @DeleteMapping("/employee/{employeeId}")
-    public ResponseEntity<Map<String, Object>> employeeDelete(
-        @PathVariable("employeeId") String employeeIdRaw
-    ) {
-        String employeeId = normalizeText(employeeIdRaw);
-        if (employeeId == null) {
-            return badRequest("Параметр employeeId обязателен");
-        }
-        if (!employeeId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
-            return badRequest("Параметр employeeId должен быть UUID");
-        }
-
-        try {
-            Integer existingEmployeeCount = jdbcTemplate.queryForObject(
-                """
-                select count(*)::int
-                from party.employee e
-                where e.id = ?::uuid
-                  and e.deleted = false
-                """,
-                Integer.class,
-                employeeId
-            );
-            if (existingEmployeeCount == null || existingEmployeeCount == 0) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf(
-                    "ok", false,
-                    "error", "Сотрудник не найден или уже удален"
-                ));
-            }
-
-            Integer usedAsBossCount = jdbcTemplate.queryForObject(
-                """
-                select count(*)::int
-                from party.emp_pos_empl_org_unit eou
-                join party.employee e on e.id = eou.employee_id
-                where eou.deleted = false
-                  and e.deleted = false
-                  and eou.parent_id = ?::uuid
-                """,
-                Integer.class,
-                employeeId
-            );
-            if (usedAsBossCount != null && usedAsBossCount > 0) {
-                return ResponseEntity.status(HttpStatus.CONFLICT).body(mapOf(
-                    "ok", false,
-                    "error", "Вы пытаетесь удалить сотрудника, который является руководителем для других сотрудников"
-                ));
-            }
-
-            int deletedRelationsCount = jdbcTemplate.update(
-                """
-                delete from party.relation
-                where employee_id = ?::uuid
-                """,
-                employeeId
-            );
-
-            int deletedSubordinationCount = jdbcTemplate.update(
-                """
-                delete from party.emp_pos_empl_org_unit
-                where employee_id = ?::uuid
-                   or parent_id = ?::uuid
-                """,
-                employeeId,
-                employeeId
-            );
-
-            int deletedCount = jdbcTemplate.update(
-                """
-                update party.employee
+                update party.organ_unit
                 set
                   deleted = true,
                   updated_at = now()
                 where id = ?::uuid
                   and deleted = false
                 """,
-                employeeId
-            );
-            if (deletedCount == 0) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf(
-                    "ok", false,
-                    "error", "Сотрудник не найден или уже удален"
-                ));
-            }
-
-            return ResponseEntity.ok(mapOf(
-                "ok", true,
-                "deleted_count", deletedCount,
-                "relationDeletedCount", deletedRelationsCount,
-                "subordinationDeletedCount", deletedSubordinationCount
-            ));
-        } catch (Exception exception) {
-            return serverError(exception, "Внутренняя ошибка удаления");
-        }
-    }
-
-    @DeleteMapping("/employee-position/{employeeOrganId}")
-    public ResponseEntity<Map<String, Object>> employeePositionDelete(
-        @PathVariable("employeeOrganId") String employeeOrganId
-    ) {
-        String normalizedEmployeeOrganId = normalizeText(employeeOrganId);
-        if (normalizedEmployeeOrganId == null) {
-            return badRequest("Параметр employeeOrganId обязателен");
-        }
-        if (!normalizedEmployeeOrganId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
-            return badRequest("Параметр employeeOrganId должен быть UUID");
-        }
-
-        try {
-            int deletedCount = jdbcTemplate.update(
-                """
-                delete from party.emp_pos_empl_org_unit
-                where id = ?::uuid
-                """,
-                normalizedEmployeeOrganId
-            );
-            if (deletedCount == 0) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf(
-                    "ok", false,
-                    "error", "Связь подчинения не найдена"
-                ));
-            }
-
-            return ResponseEntity.ok(mapOf(
-                "ok", true,
-                "deleted_count", deletedCount
-            ));
-        } catch (Exception exception) {
-            return serverError(exception, "Внутренняя ошибка удаления");
-        }
-    }
-
-    @PostMapping("/employee-position")
-    public ResponseEntity<Map<String, Object>> employeePositionCreate(
-        @RequestBody(required = false) Map<String, Object> rawBody
-    ) {
-        Map<String, Object> body = normalizeRequestBody(rawBody);
-        String employeeId = normalizeText(body.get("employeeId"));
-        String organUnitId = normalizeText(body.get("organUnitId"));
-        String employeePositionId = normalizeText(body.get("employeePositionId"));
-        String bossEmployeeId = normalizeText(body.get("bossEmployeeId"));
-
-        if (employeeId == null) {
-            return badRequest("Параметр employeeId обязателен");
-        }
-        if (organUnitId == null) {
-            return badRequest("Параметр organUnitId обязателен");
-        }
-        if (!employeeId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
-            return badRequest("Параметр employeeId должен быть UUID");
-        }
-        if (!organUnitId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
-            return badRequest("Параметр organUnitId должен быть UUID");
-        }
-        if (employeePositionId != null
-            && !employeePositionId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
-            return badRequest("Параметр employeePositionId должен быть UUID");
-        }
-        if (bossEmployeeId != null
-            && !bossEmployeeId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
-            return badRequest("Параметр bossEmployeeId должен быть UUID");
-        }
-        if (bossEmployeeId != null && bossEmployeeId.equalsIgnoreCase(employeeId)) {
-            return badRequest("Сотрудник не может быть руководителем сам себе");
-        }
-
-        try {
-            String parentEmployeeOrganId = bossEmployeeId;
-
-            Integer duplicateCount = jdbcTemplate.queryForObject(
-                """
-                select count(*)::int
-                from party.emp_pos_empl_org_unit eou
-                where eou.deleted = false
-                  and eou.employee_id = ?::uuid
-                  and eou.organ_unit_id = ?::uuid
-                """,
-                Integer.class,
-                employeeId,
                 organUnitId
             );
-            if (duplicateCount != null && duplicateCount > 0) {
-                return ResponseEntity.status(HttpStatus.CONFLICT).body(mapOf(
-                    "ok", false,
-                    "error", "Связь подчинения с указанными параметрами уже существует"
-                ));
-            }
-
-            String employeeOrganId = jdbcTemplate.queryForObject(
+            int deletedAddressCount = jdbcTemplate.update(
                 """
-                insert into party.emp_pos_empl_org_unit (
-                  employee_id,
-                  organ_unit_id,
-                  employee_position_id,
-                  parent_id
-                )
-                values (?::uuid, ?::uuid, ?::uuid, ?::uuid)
-                returning id::text
-                """,
-                String.class,
-                employeeId,
-                organUnitId,
-                employeePositionId,
-                parentEmployeeOrganId
-            );
-
-            Map<String, Object> item = jdbcTemplate.queryForMap(
-                """
-                with recursive chain as (
-                  select
-                    ou.id,
-                    ou.parent_id,
-                    coalesce(ou.sh_name, ou.name) as sh_name
-                  from party.emp_pos_empl_org_unit eou
-                  join party.organ_unit ou on ou.id = eou.organ_unit_id and ou.deleted = false
-                  where eou.id = ?::uuid
-                    and eou.deleted = false
-                  union all
-                  select
-                    p.id,
-                    p.parent_id,
-                    coalesce(p.sh_name, p.name) as sh_name
-                  from chain
-                  join party.organ_unit p on p.id = chain.parent_id and p.deleted = false
-                ),
-                root as (
-                  select id, sh_name
-                  from chain
-                  where parent_id is null
-                  limit 1
-                )
-                select
-                  eou.id::text as "employeeOrganId",
-                  root.sh_name as organ_name,
-                  root.id::text as organ_unit_id,
-                  root_ou.sap_id as organ_sap_id,
-                  root_ou.inn as organ_inn,
-                  root_ou.kpp as organ_kpp,
-                  root_ou.ogrn as organ_ogrn,
-                  addr.full_address as organ_full_address,
-                  coalesce(ou.sh_name, ou.name) as depart_name,
-                  ou.id::text as depart_unit_id,
-                  eou.employee_position_id::text as position_id,
-                  ep.name as position_name,
-                  boss.id::text as boss_id,
-                  boss.full_name as boss_name
-                from party.emp_pos_empl_org_unit eou
-                join party.organ_unit ou on ou.id = eou.organ_unit_id and ou.deleted = false
-                left join root on true
-                left join party.organ_unit root_ou on root_ou.id = root.id and root_ou.deleted = false
-                left join lateral (
-                  select a.full_address
-                  from party.address a
-                  where a.organ_unit_id = root.id
-                    and a.deleted = false
-                  order by a.id
-                  limit 1
-                ) addr on true
-                left join party.employee_position ep on ep.id = eou.employee_position_id and ep.deleted = false
-                left join party.employee boss on boss.id = eou.parent_id and boss.deleted = false
-                where eou.id = ?::uuid
-                  and eou.deleted = false
-                limit 1
-                """,
-                employeeOrganId,
-                employeeOrganId
-            );
-
-            return ResponseEntity.status(HttpStatus.CREATED).body(mapOf(
-                "ok", true,
-                "item", item
-            ));
-        } catch (Exception exception) {
-            return serverError(exception, "Внутренняя ошибка запроса");
-        }
-    }
-
-    @PatchMapping("/employee-position/{employeeOrganId}")
-    public ResponseEntity<Map<String, Object>> employeePositionUpdate(
-        @PathVariable("employeeOrganId") String employeeOrganIdRaw,
-        @RequestBody(required = false) Map<String, Object> rawBody
-    ) {
-        String employeeOrganId = normalizeText(employeeOrganIdRaw);
-        if (employeeOrganId == null) {
-            return badRequest("Параметр employeeOrganId обязателен");
-        }
-        if (!employeeOrganId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
-            return badRequest("Параметр employeeOrganId должен быть UUID");
-        }
-
-        Map<String, Object> body = normalizeRequestBody(rawBody);
-        String employeeId = normalizeText(body.get("employeeId"));
-        String organUnitId = normalizeText(body.get("organUnitId"));
-        String employeePositionId = normalizeText(body.get("employeePositionId"));
-        String bossEmployeeId = normalizeText(body.get("bossEmployeeId"));
-
-        if (employeeId == null) {
-            return badRequest("Параметр employeeId обязателен");
-        }
-        if (organUnitId == null) {
-            return badRequest("Параметр organUnitId обязателен");
-        }
-        if (!employeeId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
-            return badRequest("Параметр employeeId должен быть UUID");
-        }
-        if (!organUnitId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
-            return badRequest("Параметр organUnitId должен быть UUID");
-        }
-        if (employeePositionId != null
-            && !employeePositionId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
-            return badRequest("Параметр employeePositionId должен быть UUID");
-        }
-        if (bossEmployeeId != null
-            && !bossEmployeeId.matches("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$")) {
-            return badRequest("Параметр bossEmployeeId должен быть UUID");
-        }
-        if (bossEmployeeId != null && bossEmployeeId.equalsIgnoreCase(employeeId)) {
-            return badRequest("Сотрудник не может быть руководителем сам себе");
-        }
-
-        try {
-            String parentEmployeeOrganId = bossEmployeeId;
-
-            Integer duplicateCount = jdbcTemplate.queryForObject(
-                """
-                select count(*)::int
-                from party.emp_pos_empl_org_unit eou
-                where eou.deleted = false
-                  and eou.employee_id = ?::uuid
-                  and eou.organ_unit_id = ?::uuid
-                  and eou.id <> ?::uuid
-                """,
-                Integer.class,
-                employeeId,
-                organUnitId,
-                employeeOrganId
-            );
-            if (duplicateCount != null && duplicateCount > 0) {
-                return ResponseEntity.status(HttpStatus.CONFLICT).body(mapOf(
-                    "ok", false,
-                    "error", "Связь подчинения с указанными параметрами уже существует"
-                ));
-            }
-
-            int updatedCount = jdbcTemplate.update(
-                """
-                update party.emp_pos_empl_org_unit
+                update party.address
                 set
-                  employee_id = ?::uuid,
-                  organ_unit_id = ?::uuid,
-                  employee_position_id = ?::uuid,
-                  parent_id = ?::uuid,
+                  deleted = true,
                   updated_at = now()
-                where id = ?::uuid
+                where organ_unit_id = ?::uuid
                   and deleted = false
                 """,
-                employeeId,
-                organUnitId,
-                employeePositionId,
-                parentEmployeeOrganId,
-                employeeOrganId
+                organUnitId
             );
-            if (updatedCount == 0) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf(
-                    "ok", false,
-                    "error", "Связь подчинения не найдена"
-                ));
-            }
-
-            Map<String, Object> item = jdbcTemplate.queryForMap(
+            int deletedEmailCount = jdbcTemplate.update(
                 """
-                with recursive chain as (
-                  select
-                    ou.id,
-                    ou.parent_id,
-                    coalesce(ou.sh_name, ou.name) as sh_name
-                  from party.emp_pos_empl_org_unit eou
-                  join party.organ_unit ou on ou.id = eou.organ_unit_id and ou.deleted = false
-                  where eou.id = ?::uuid
-                    and eou.deleted = false
-                  union all
-                  select
-                    p.id,
-                    p.parent_id,
-                    coalesce(p.sh_name, p.name) as sh_name
-                  from chain
-                  join party.organ_unit p on p.id = chain.parent_id and p.deleted = false
-                ),
-                root as (
-                  select id, sh_name
-                  from chain
-                  where parent_id is null
-                  limit 1
-                )
-                select
-                  eou.id::text as "employeeOrganId",
-                  root.sh_name as organ_name,
-                  root.id::text as organ_unit_id,
-                  root_ou.sap_id as organ_sap_id,
-                  root_ou.inn as organ_inn,
-                  root_ou.kpp as organ_kpp,
-                  root_ou.ogrn as organ_ogrn,
-                  addr.full_address as organ_full_address,
-                  coalesce(ou.sh_name, ou.name) as depart_name,
-                  ou.id::text as depart_unit_id,
-                  eou.employee_position_id::text as position_id,
-                  ep.name as position_name,
-                  boss.id::text as boss_id,
-                  boss.full_name as boss_name
-                from party.emp_pos_empl_org_unit eou
-                join party.organ_unit ou on ou.id = eou.organ_unit_id and ou.deleted = false
-                left join root on true
-                left join party.organ_unit root_ou on root_ou.id = root.id and root_ou.deleted = false
-                left join lateral (
-                  select a.full_address
-                  from party.address a
-                  where a.organ_unit_id = root.id
-                    and a.deleted = false
-                  order by a.id
-                  limit 1
-                ) addr on true
-                left join party.employee_position ep on ep.id = eou.employee_position_id and ep.deleted = false
-                left join party.employee boss on boss.id = eou.parent_id and boss.deleted = false
-                where eou.id = ?::uuid
-                  and eou.deleted = false
-                limit 1
+                update party.organ_unit_email
+                set
+                  deleted = true,
+                  updated_at = now()
+                where organ_unit_id = ?::uuid
+                  and deleted = false
                 """,
-                employeeOrganId,
-                employeeOrganId
+                organUnitId
+            );
+            int deletedTypeRelationsCount = jdbcTemplate.update(
+                """
+                delete from party.organ_unit_organ_unit_types
+                where organ_unit_id = ?::uuid
+                """,
+                organUnitId
             );
 
             return ResponseEntity.ok(mapOf(
                 "ok", true,
-                "item", item
+                "deleted_count", deletedOrganUnitCount,
+                "addressDeletedCount", deletedAddressCount,
+                "organUnitTypesDeletedCount", deletedTypeRelationsCount,
+                "organUnitEmailsDeletedCount", deletedEmailCount
             ));
         } catch (Exception exception) {
-            return serverError(exception, "Внутренняя ошибка запроса");
+            return serverError(exception, "Внутренняя ошибка удаления организации");
         }
     }
+
     private String hasArrayValue(Map<String, Object> body, Set<String> allowedArrayKeys) {
         for (Map.Entry<String, Object> entry : body.entrySet()) {
             if (entry.getValue() instanceof List<?> && !allowedArrayKeys.contains(entry.getKey())) {
@@ -4835,17 +3791,6 @@ public class ApiController {
         for (SortRule sort : sorts) {
             String baseExpr = RELATION_SORT_SQL.get(sort.field());
             String sortExpr = RELATION_TEXT_SORT_FIELDS.contains(sort.field()) ? baseExpr + " collate \"C\"" : baseExpr;
-            chunks.add(sortExpr + " " + sort.direction() + " nulls last");
-        }
-        return String.join(", ", chunks);
-    }
-
-    private String buildReportTemplateOrderBy(List<SortRule> sorts) {
-        List<String> chunks = new ArrayList<>();
-        for (SortRule sort : sorts) {
-            String baseExpr = REPORT_TEMPLATE_SORT_SQL.get(sort.field());
-            String sortExpr =
-                REPORT_TEMPLATE_TEXT_SORT_FIELDS.contains(sort.field()) ? baseExpr + " collate \"C\"" : baseExpr;
             chunks.add(sortExpr + " " + sort.direction() + " nulls last");
         }
         return String.join(", ", chunks);
@@ -6172,6 +5117,15 @@ public class ApiController {
         if (address != null) {
             filters.put(ORG_FILTER_TITLES.get("address"), address);
         }
+        List<String> organUnitTypeNames = normalizeStringList(
+            body.containsKey("organUnitTypeNames") ? body.get("organUnitTypeNames") : body.get("organTypeNames")
+        );
+        if (!organUnitTypeNames.isEmpty()) {
+            filters.put(
+                ORG_FILTER_TITLES.get("organ_unit_type_names"),
+                String.join(", ", organUnitTypeNames)
+            );
+        }
 
         filters.put("Сортировка", formatSortRules(sorts, ORG_FILTER_TITLES));
         return filters;
@@ -6219,11 +5173,11 @@ public class ApiController {
 
     private String validateReportTemplateSqlText(String sqlQuery) {
         if (sqlQuery == null) {
-            return "Параметр sqlQuery обязателен";
+            return null;
         }
         String normalizedSql = normalizeSingleSqlStatement(sqlQuery);
         if (normalizedSql.isEmpty()) {
-            return "Параметр sqlQuery обязателен";
+            return null;
         }
         if (hasMultipleSqlStatements(normalizedSql)) {
             return "SQL-скрипт должен содержать только один SQL-скрипт";
@@ -6255,40 +5209,6 @@ public class ApiController {
         return null;
     }
 
-    private Integer getReportTemplateNumberDays(String reportTemplateId) {
-        try {
-            return jdbcTemplate.queryForObject(
-                """
-                select coalesce(rt.number_days, 0)::int
-                from public.report_templates rt
-                where rt.id = ?::uuid
-                  and rt.deleted = false
-                """,
-                Integer.class,
-                reportTemplateId
-            );
-        } catch (Exception exception) {
-            return null;
-        }
-    }
-
-    private String getReportTemplateMethod(String reportTemplateId) {
-        try {
-            return jdbcTemplate.queryForObject(
-                """
-                select upper(coalesce(rt.method, 'AUTO'))
-                from public.report_templates rt
-                where rt.id = ?::uuid
-                  and rt.deleted = false
-                """,
-                String.class,
-                reportTemplateId
-            );
-        } catch (Exception exception) {
-            return null;
-        }
-    }
-
     private List<String> normalizeRoleNames(Object rawRoleNames) {
         if (rawRoleNames instanceof List<?> listValue) {
             List<String> result = new ArrayList<>();
@@ -6314,6 +5234,131 @@ public class ApiController {
         return result;
     }
 
+    private List<String> normalizeStringList(Object rawValue) {
+        if (rawValue instanceof List<?> listValue) {
+            List<String> result = new ArrayList<>();
+            for (Object item : listValue) {
+                String normalized = normalizeText(item);
+                if (normalized != null && !normalized.isBlank()) {
+                    result.add(normalized);
+                }
+            }
+            return result;
+        }
+        String asText = normalizeText(rawValue);
+        if (asText == null) {
+            return List.of();
+        }
+        List<String> result = new ArrayList<>();
+        for (String token : asText.split(",")) {
+            String normalized = normalizeText(token);
+            if (normalized != null && !normalized.isBlank()) {
+                result.add(normalized);
+            }
+        }
+        return result;
+    }
+
+    private List<Map<String, Object>> extractDadataSuggestions(Object rawValue) {
+        if (!(rawValue instanceof List<?> listValue)) {
+            return List.of();
+        }
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (Object item : listValue) {
+            if (!(item instanceof Map<?, ?> mapItem)) {
+                continue;
+            }
+            LinkedHashMap<String, Object> normalized = new LinkedHashMap<>();
+            for (Map.Entry<?, ?> entry : mapItem.entrySet()) {
+                normalized.put(String.valueOf(entry.getKey()), entry.getValue());
+            }
+            result.add(normalized);
+        }
+        return result;
+    }
+
+    private Map<String, Object> requestDadataFindParty(Map<String, Object> payload) throws Exception {
+        String payloadJson = objectMapper.writeValueAsString(payload);
+        HttpRequest request = HttpRequest.newBuilder()
+            .uri(URI.create(dadataFindPartyUrl))
+            .timeout(Duration.ofSeconds(20))
+            .header("Content-Type", "application/json")
+            .header("Accept", "application/json")
+            .header("Authorization", "Token " + dadataApiToken)
+            .POST(HttpRequest.BodyPublishers.ofString(payloadJson, StandardCharsets.UTF_8))
+            .build();
+
+        HttpResponse<String> response = HttpClient.newHttpClient().send(
+            request,
+            HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8)
+        );
+        if (response.statusCode() < 200 || response.statusCode() >= 300) {
+            throw new IllegalStateException("DaData вернул ошибку HTTP " + response.statusCode() + ": " + response.body());
+        }
+        return objectMapper.readValue(
+            response.body(),
+            new TypeReference<Map<String, Object>>() {}
+        );
+    }
+
+    private Map<String, Object> toDadataOrganizationItem(Map<String, Object> suggestion) {
+        Map<String, Object> data = toStringKeyMap(suggestion.get("data"));
+        Map<String, Object> name = toStringKeyMap(data.get("name"));
+        Map<String, Object> address = toStringKeyMap(data.get("address"));
+        Map<String, Object> state = toStringKeyMap(data.get("state"));
+
+        String inn = normalizeText(data.get("inn"));
+        String kpp = normalizeText(data.get("kpp"));
+        String ogrn = normalizeText(data.get("ogrn"));
+        String okpo = normalizeText(data.get("okpo"));
+        String fullName = normalizeText(name.get("full_with_opf"));
+        String shortName = normalizeText(name.get("short_with_opf"));
+        String fullAddress = normalizeText(address.get("value"));
+        String stateStatus = normalizeText(state.get("status"));
+        String branchType = normalizeText(data.get("branch_type"));
+        String type = normalizeText(data.get("type"));
+
+        return mapOf(
+            "inn", inn,
+            "kpp", kpp,
+            "ogrn", ogrn,
+            "okpo", okpo,
+            "name", fullName,
+            "shName", shortName,
+            "address", fullAddress,
+            "stateStatus", stateStatus,
+            "branchType", branchType,
+            "type", type
+        );
+    }
+
+    private Map<String, Object> toStringKeyMap(Object rawValue) {
+        if (!(rawValue instanceof Map<?, ?> mapValue)) {
+            return Map.of();
+        }
+        LinkedHashMap<String, Object> result = new LinkedHashMap<>();
+        for (Map.Entry<?, ?> entry : mapValue.entrySet()) {
+            result.put(String.valueOf(entry.getKey()), entry.getValue());
+        }
+        return result;
+    }
+
+    private Map<String, Object> parseJsonObject(Object rawJson) {
+        String jsonText = normalizeText(rawJson);
+        if (jsonText == null) {
+            return Map.of();
+        }
+        try {
+            Map<String, Object> parsed = objectMapper.readValue(
+                jsonText,
+                new TypeReference<Map<String, Object>>() {}
+            );
+            return parsed == null ? Map.of() : parsed;
+        } catch (Exception exception) {
+            return Map.of();
+        }
+    }
+
     private String toSqlTextArrayLiteral(List<String> roleNames) {
         if (roleNames == null || roleNames.isEmpty()) {
             return "ARRAY[]::text[]";
@@ -6323,29 +5368,6 @@ public class ApiController {
             .map(this::toSqlStringOrNull)
             .collect(Collectors.joining(", "));
         return "ARRAY[" + joined + "]::text[]";
-    }
-
-    private String toReportTemplateCheckSql(String sqlQuery, String reportTemplateId, Integer numberDays) {
-        return toReportTemplateCheckSql(sqlQuery, reportTemplateId, numberDays, null, null, null, reportTemplateId, List.of());
-    }
-
-    private String toReportTemplateCheckSql(
-        String sqlQuery,
-        String reportTemplateId,
-        Integer numberDays,
-        String startReportValue,
-        String endReportValue
-    ) {
-        return toReportTemplateCheckSql(
-            sqlQuery,
-            reportTemplateId,
-            numberDays,
-            startReportValue,
-            endReportValue,
-            null,
-            reportTemplateId,
-            List.of()
-        );
     }
 
     private String toReportTemplateCheckSql(
@@ -6362,6 +5384,7 @@ public class ApiController {
             return "";
         }
         String normalized = normalizeSingleSqlStatement(sqlQuery);
+        normalized = normalizeReportTemplateParams(normalized);
         String roleNamesArrayLiteral = toSqlTextArrayLiteral(roleNames);
         normalized = normalized.replaceAll(
             "(?i)array\\s*\\[\\s*:roleNames\\s*\\](\\s*::\\s*[a-zA-Z0-9_\\[\\]]+)?",
@@ -6396,6 +5419,30 @@ public class ApiController {
         return result.toString();
     }
 
+    private String normalizeReportTemplateParams(String sqlText) {
+        if (sqlText == null || sqlText.isBlank()) {
+            return sqlText;
+        }
+        String normalized = sqlText;
+        normalized = normalized.replaceAll(
+            "(?i)null\\s*::\\s*date\\s+as\\s+startReport\\b",
+            ":startReport::date AS startReport"
+        );
+        normalized = normalized.replaceAll(
+            "(?i)null\\s*::\\s*date\\s+as\\s+endReport\\b",
+            ":endReport::date AS endReport"
+        );
+        normalized = normalized.replaceAll(
+            "(?i)null\\s*::\\s*uuid\\s+as\\s+claimOrganizationId\\b",
+            ":claimOrganizationId::uuid AS claimOrganizationId"
+        );
+        normalized = normalized.replaceAll(
+            "(?i)null\\s*::\\s*integer\\s+as\\s+numberDays\\b",
+            ":numberDays::integer AS numberDays"
+        );
+        return normalized;
+    }
+
     private String toSqlStringOrNull(String value) {
         String normalized = normalizeText(value);
         if (normalized == null) {
@@ -6417,10 +5464,23 @@ public class ApiController {
     }
 
     private String normalizeSingleSqlStatement(String sqlQuery) {
-        String normalized = sqlQuery == null ? "" : sqlQuery.trim();
+        String normalized = sqlQuery == null ? "" : normalizeSqlWhitespaceCharacters(sqlQuery).trim();
         while (normalized.endsWith(";")) {
             normalized = normalized.substring(0, normalized.length() - 1).trim();
         }
+        return normalized;
+    }
+
+    private String normalizeSqlWhitespaceCharacters(String value) {
+        if (value == null || value.isEmpty()) {
+            return value;
+        }
+        // SQL copied from office tools may contain non-breaking spaces and similar unicode separators.
+        // PostgreSQL parser treats them as unexpected symbols, so normalize them to a regular space.
+        String normalized = value
+            .replace('\u00A0', ' ')
+            .replace('\u2007', ' ')
+            .replace('\u202F', ' ');
         return normalized;
     }
 
@@ -7169,6 +6229,82 @@ public class ApiController {
         return normalizedReason.isEmpty() ? line : line + " [reason=" + normalizedReason + "]";
     }
 
+    private List<OrganizationReferenceCheck> loadOrganizationReferenceChecks() {
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+            """
+            select
+              c.table_schema,
+              c.table_name,
+              c.column_name,
+              exists (
+                select 1
+                from information_schema.columns dc
+                where dc.table_schema = c.table_schema
+                  and dc.table_name = c.table_name
+                  and dc.column_name = 'deleted'
+              ) as has_deleted
+            from information_schema.columns c
+            where c.table_schema not in ('information_schema', 'pg_catalog')
+              and c.column_name in (
+                'client_id',
+                'sales_organization_id',
+                'claim_organization_id',
+                'cliam_organization_id',
+                'claim_organization_orig_id',
+                'organ_unit_id'
+              )
+              and not (
+                c.table_schema = 'party'
+                and c.table_name in ('address', 'organ_unit_organ_unit_types', 'organ_unit_email')
+              )
+            order by c.table_schema, c.table_name, c.column_name
+            """
+        );
+        List<OrganizationReferenceCheck> out = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            String schema = normalizeText(row.get("table_schema"));
+            String table = normalizeText(row.get("table_name"));
+            String column = normalizeText(row.get("column_name"));
+            if (schema == null || table == null || column == null) {
+                continue;
+            }
+            if (
+                !schema.matches("^[a-zA-Z_][a-zA-Z0-9_]*$")
+                    || !table.matches("^[a-zA-Z_][a-zA-Z0-9_]*$")
+                    || !column.matches("^[a-zA-Z_][a-zA-Z0-9_]*$")
+            ) {
+                continue;
+            }
+            boolean hasDeleted = toBooleanOrDefault(row.get("has_deleted"), false);
+            out.add(new OrganizationReferenceCheck(schema, table, column, hasDeleted));
+        }
+        return out;
+    }
+
+    private String buildOrganizationReferenceCheckSql(OrganizationReferenceCheck reference) {
+        String schemaSql = quoteIdentifier(reference.schema());
+        String tableSql = quoteIdentifier(reference.table());
+        String columnSql = quoteIdentifier(reference.column());
+        String deletedCondition = reference.hasDeleted()
+            ? " and (t.deleted = false or t.deleted is null)"
+            : "";
+        return "select count(*)::int from "
+            + schemaSql
+            + "."
+            + tableSql
+            + " t where t."
+            + columnSql
+            + " = ?::uuid"
+            + deletedCondition;
+    }
+
+    private String quoteIdentifier(String value) {
+        if (value == null || !value.matches("^[a-zA-Z_][a-zA-Z0-9_]*$")) {
+            throw new IllegalArgumentException("Недопустимое имя идентификатора SQL");
+        }
+        return "\"" + value + "\"";
+    }
+
     private String getErrorMessage(Exception exception) {
         return exception.getMessage() == null ? "Неизвестная ошибка" : exception.getMessage();
     }
@@ -7271,5 +6407,16 @@ public class ApiController {
     }
 
     private record PendingEmployeeRow(int rowNumber, String email, ValidRowData data) {
+    }
+
+    private record OrganizationReferenceCheck(
+        String schema,
+        String table,
+        String column,
+        boolean hasDeleted
+    ) {
+        String fullTableName() {
+            return schema + "." + table;
+        }
     }
 }
