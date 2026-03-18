@@ -1,6 +1,7 @@
 package com.employees.backend;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.employees.backend.repository.EmployeeRepository;
+import com.employees.backend.service.EmployeeService;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -12,18 +13,12 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
-class ApiControllerEmployeePositionBossSmokeTest {
+class EmployeeServiceEmployeePositionBossSmokeTest {
 
     @Test
     void createEmployeePositionSavesBossEmployeeIdIntoParentId() {
-        CapturingJdbcTemplate jdbc = new CapturingJdbcTemplate();
-        ApiController controller = new ApiController(
-            jdbc,
-            new ObjectMapper(),
-            new ReportTemplateExportService(),
-            "backend/logs",
-            "http://localhost:5175"
-        );
+        CapturingEmployeeRepository repository = new CapturingEmployeeRepository();
+        EmployeeService employeeService = new EmployeeService(repository, "backend/logs");
 
         String employeeId = "11111111-1111-4111-8111-111111111111";
         String organUnitId = "22222222-2222-4222-8222-222222222222";
@@ -36,23 +31,17 @@ class ApiControllerEmployeePositionBossSmokeTest {
         body.put("employeePositionId", employeePositionId);
         body.put("bossEmployeeId", bossEmployeeId);
 
-        ResponseEntity<Map<String, Object>> response = controller.employeePositionCreate(body);
+        ResponseEntity<Map<String, Object>> response = employeeService.employeePositionCreate(body);
 
         assertEquals(HttpStatus.CREATED, response.getStatusCode());
-        assertNotNull(jdbc.capturedInsertArgs);
-        assertEquals(bossEmployeeId, jdbc.capturedInsertArgs[3]);
+        assertNotNull(repository.capturedInsertArgs);
+        assertEquals(bossEmployeeId, repository.capturedInsertArgs[3]);
     }
 
     @Test
     void updateEmployeePositionSavesBossEmployeeIdIntoParentId() {
-        CapturingJdbcTemplate jdbc = new CapturingJdbcTemplate();
-        ApiController controller = new ApiController(
-            jdbc,
-            new ObjectMapper(),
-            new ReportTemplateExportService(),
-            "backend/logs",
-            "http://localhost:5175"
-        );
+        CapturingEmployeeRepository repository = new CapturingEmployeeRepository();
+        EmployeeService employeeService = new EmployeeService(repository, "backend/logs");
 
         String employeeOrganId = "66666666-6666-4666-8666-666666666666";
         String employeeId = "11111111-1111-4111-8111-111111111111";
@@ -66,16 +55,20 @@ class ApiControllerEmployeePositionBossSmokeTest {
         body.put("employeePositionId", employeePositionId);
         body.put("bossEmployeeId", bossEmployeeId);
 
-        ResponseEntity<Map<String, Object>> response = controller.employeePositionUpdate(employeeOrganId, body);
+        ResponseEntity<Map<String, Object>> response = employeeService.employeePositionUpdate(employeeOrganId, body);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertNotNull(jdbc.capturedUpdateArgs);
-        assertEquals(bossEmployeeId, jdbc.capturedUpdateArgs[3]);
+        assertNotNull(repository.capturedUpdateArgs);
+        assertEquals(bossEmployeeId, repository.capturedUpdateArgs[3]);
     }
 
-    private static class CapturingJdbcTemplate extends JdbcTemplate {
+    private static class CapturingEmployeeRepository extends EmployeeRepository {
         private Object[] capturedInsertArgs;
         private Object[] capturedUpdateArgs;
+
+        private CapturingEmployeeRepository() {
+            super(new JdbcTemplate());
+        }
 
         @Override
         public <T> T queryForObject(String sql, Class<T> requiredType, Object... args) {
