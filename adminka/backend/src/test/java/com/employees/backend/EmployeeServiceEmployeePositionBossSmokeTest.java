@@ -5,7 +5,7 @@ import com.employees.backend.service.EmployeeService;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -34,8 +34,8 @@ class EmployeeServiceEmployeePositionBossSmokeTest {
         ResponseEntity<Map<String, Object>> response = employeeService.employeePositionCreate(body);
 
         assertEquals(HttpStatus.CREATED, response.getStatusCode());
-        assertNotNull(repository.capturedInsertArgs);
-        assertEquals(bossEmployeeId, repository.capturedInsertArgs[3]);
+        assertNotNull(repository.capturedInsertParentId);
+        assertEquals(bossEmployeeId, repository.capturedInsertParentId);
     }
 
     @Test
@@ -58,46 +58,59 @@ class EmployeeServiceEmployeePositionBossSmokeTest {
         ResponseEntity<Map<String, Object>> response = employeeService.employeePositionUpdate(employeeOrganId, body);
 
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertNotNull(repository.capturedUpdateArgs);
-        assertEquals(bossEmployeeId, repository.capturedUpdateArgs[3]);
+        assertNotNull(repository.capturedUpdateParentId);
+        assertEquals(bossEmployeeId, repository.capturedUpdateParentId);
     }
 
     private static class CapturingEmployeeRepository extends EmployeeRepository {
-        private Object[] capturedInsertArgs;
-        private Object[] capturedUpdateArgs;
+        private String capturedInsertParentId;
+        private String capturedUpdateParentId;
 
         private CapturingEmployeeRepository() {
-            super(new JdbcTemplate());
+            super(new NamedParameterJdbcTemplate(new org.springframework.jdbc.core.JdbcTemplate()));
         }
 
         @Override
-        public <T> T queryForObject(String sql, Class<T> requiredType, Object... args) {
+        public <T> T queryForNamedObject(String sql, Class<T> requiredType, Object beanParams) {
             if (sql.contains("select count(*)::int")) {
                 return requiredType.cast(Integer.valueOf(0));
             }
             if (sql.contains("insert into party.emp_pos_empl_org_unit")) {
-                this.capturedInsertArgs = args;
+                this.capturedInsertParentId = String.valueOf(readParam(beanParams, "parentId"));
                 return requiredType.cast("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
             }
             throw new IllegalStateException("Unexpected queryForObject SQL in test");
         }
 
         @Override
-        public int update(String sql, Object... args) {
+        public int updateNamed(String sql, Object beanParams) {
             if (sql.contains("update party.emp_pos_empl_org_unit")) {
-                this.capturedUpdateArgs = args;
+                this.capturedUpdateParentId = String.valueOf(readParam(beanParams, "parentId"));
                 return 1;
             }
             throw new IllegalStateException("Unexpected update SQL in test");
         }
 
         @Override
-        public Map<String, Object> queryForMap(String sql, Object... args) {
+        public Map<String, Object> queryForNamedMap(String sql, Object beanParams) {
             return Map.of(
-                "employeeOrganId", args[0],
+                "employeeOrganId", readParam(beanParams, "employeeOrganId"),
                 "boss_id", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
                 "boss_name", "Boss Name"
             );
+        }
+
+        private Object readParam(Object beanParams, String name) {
+            if (beanParams == null) {
+                return null;
+            }
+            try {
+                java.lang.reflect.Method accessor = beanParams.getClass().getDeclaredMethod(name);
+                accessor.setAccessible(true);
+                return accessor.invoke(beanParams);
+            } catch (Exception exception) {
+                throw new IllegalStateException("Cannot read parameter: " + name, exception);
+            }
         }
     }
 }
