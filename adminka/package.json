@@ -4,10 +4,14 @@
   "version": "1.0.0",
   "scripts": {
     "install:all": "npm install --prefix frontend && PATH=\"/opt/homebrew/opt/openjdk/bin:/usr/local/opt/openjdk/bin:$PATH\" ./backend/mvnw -f backend/pom.xml dependency:go-offline",
-    "dev": "concurrently \"ALL_PROXY= HTTP_PROXY= HTTPS_PROXY= SOCKS_PROXY= SOCKS5_PROXY= all_proxy= http_proxy= https_proxy= socks_proxy= socks5_proxy= NO_PROXY=127.0.0.1,::1,localhost no_proxy=127.0.0.1,::1,localhost PATH=\\\"/opt/homebrew/opt/openjdk/bin:/usr/local/opt/openjdk/bin:$PATH\\\" ./backend/mvnw -f backend/pom.xml spring-boot:run\" \"npm run dev --prefix frontend\"",
+    "dev": "concurrently \"sh -c 'set -a; [ -f backend/.env ] && . backend/.env; set +a; ALL_PROXY= HTTP_PROXY= HTTPS_PROXY= SOCKS_PROXY= SOCKS5_PROXY= all_proxy= http_proxy= https_proxy= socks_proxy= socks5_proxy= NO_PROXY=127.0.0.1,::1,localhost no_proxy=127.0.0.1,::1,localhost PATH=\\\"/opt/homebrew/opt/openjdk/bin:/usr/local/opt/openjdk/bin:$PATH\\\" ./backend/mvnw -f backend/pom.xml -Dmaven.test.skip=true spring-boot:run'\" \"npm run dev --prefix frontend\"",
+    "dev:fixed:start": "sh ./scripts/start-adminka.sh",
+    "dev:fixed:stop": "sh ./scripts/stop-adminka.sh",
+    "dev:fixed:status": "sh ./scripts/status-adminka.sh",
+    "dev:fixed:restart": "npm run dev:fixed:stop && npm run dev:fixed:start",
     "frontend:url": "node -e \"const http=require('http');const req=http.get('http://localhost:5175/',res=>{console.log('Frontend: http://localhost:5175/ ('+res.statusCode+')');process.exit(0)});req.on('error',()=>{console.log('Frontend не запущен на http://localhost:5175/');process.exit(1)});req.setTimeout(1200,()=>{req.destroy();console.log('Frontend не отвечает на http://localhost:5175/');process.exit(1)});\"",
     "build": "npm run build --prefix frontend && PATH=\"/opt/homebrew/opt/openjdk/bin:/usr/local/opt/openjdk/bin:$PATH\" ./backend/mvnw -f backend/pom.xml package",
-    "start": "ALL_PROXY= HTTP_PROXY= HTTPS_PROXY= SOCKS_PROXY= SOCKS5_PROXY= all_proxy= http_proxy= https_proxy= socks_proxy= socks5_proxy= NO_PROXY=127.0.0.1,::1,localhost no_proxy=127.0.0.1,::1,localhost PATH=\"/opt/homebrew/opt/openjdk/bin:/usr/local/opt/openjdk/bin:$PATH\" ./backend/mvnw -f backend/pom.xml spring-boot:run"
+    "start": "sh -c 'set -a; [ -f backend/.env ] && . backend/.env; set +a; ALL_PROXY= HTTP_PROXY= HTTPS_PROXY= SOCKS_PROXY= SOCKS5_PROXY= all_proxy= http_proxy= https_proxy= socks_proxy= socks5_proxy= NO_PROXY=127.0.0.1,::1,localhost no_proxy=127.0.0.1,::1,localhost PATH=\"/opt/homebrew/opt/openjdk/bin:/usr/local/opt/openjdk/bin:$PATH\" ./backend/mvnw -f backend/pom.xml -Dmaven.test.skip=true spring-boot:run'"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

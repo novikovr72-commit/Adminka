@@ -59,6 +59,28 @@ npm run dev:fixed:stop
 - Excel-поток report-template вынесен в отдельный core-класс `ReportTemplateExcelCore` и используется через `ReportTemplateExcelFacade` + `ReportTemplateExecuteService`;
 - legacy-нейминг (`Legacy*`) из runtime-цепочек удален.
 
+## Интеграционный контракт (обязательное правило)
+
+Для упрощения интеграции в большую систему все **новые разделы/модули** в backend реализуются только в виде отдельных классов по слоям:
+
+- отдельный `...Controller` (только HTTP-слой);
+- отдельный `...Service` (бизнес-логика);
+- отдельный `...Repository` (весь SQL и доступ к БД);
+- при необходимости отдельные `...Core/...Facade` (тяжелая специализированная логика);
+- при необходимости отдельные `dto/domain/mapper`.
+
+Ограничения:
+
+- запрещено добавлять новую бизнес-логику в общие/монолитные классы;
+- запрещено смешивать HTTP, бизнес-логику и SQL в одном классе;
+- каждый новый функциональный раздел создается как отдельный набор классов по слоям.
+
+Полезные документы для интеграции:
+
+- Карта endpoint-ов по доменам: `adminka/docs/endpoints-by-domain.md`
+- Чеклист регрессионной проверки: `adminka/docs/regression-checklist-architecture-refactor.md`
+- Интеграционный контракт: `adminka/docs/integration-contract.md`
+
 Maven отдельно устанавливать не нужно: используется `backend/mvnw`.
 Java Runtime (OpenJDK) должен быть установлен через Homebrew.
 

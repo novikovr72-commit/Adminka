@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Prism from "prismjs";
 import "prismjs/components/prism-sql";
@@ -23,14 +23,33 @@ const REPORT_SETTINGS_FILTERS_STORAGE_KEY = "report-settings.filters";
 const REPORT_SETTINGS_COLUMN_WIDTHS_STORAGE_KEY = "report-settings.column-widths";
 const REPORT_SETTINGS_COLUMN_SETTINGS_STORAGE_KEY = "report-settings.column-settings";
 const ORGANIZATIONS_SORT_RULES_STORAGE_KEY = "organizations.sort-rules";
-const ORGANIZATIONS_FILTERS_STORAGE_KEY = "organizations.filters";
+const ORGANIZATIONS_FILTERS_STORAGE_KEY = "organizations.filters.v2";
 const ORGANIZATIONS_COLUMN_WIDTHS_STORAGE_KEY = "organizations.column-widths";
 const ORGANIZATIONS_COLUMN_SETTINGS_STORAGE_KEY = "organizations.column-settings";
 const REPORT_TEMPLATE_FIELDS_COLUMN_WIDTHS_STORAGE_KEY = "report-template.fields-column-widths";
 const REPORT_TEMPLATE_GENERAL_PARAMETER_COLUMN_WIDTH_STORAGE_KEY =
   "report-template.general-parameter-column-width";
 const REPORT_TEMPLATE_GENERAL_SORT_DIRECTION_STORAGE_KEY = "report-template.general-sort-direction";
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3003").replace(/\/+$/, "");
+const REPORT_TEMPLATE_LEVEL_EXPANDED_STORAGE_KEY = "report-template.level-expanded";
+const DADATA_HIDDEN_ATTRIBUTES_STORAGE_KEY = "organization.dadata.hidden-attributes.v1";
+const DADATA_VISIBLE_ONLY_STORAGE_KEY = "organization.dadata.visible-only.v1";
+const DADATA_ATTRIBUTE_ORDER_STORAGE_KEY = "organization.dadata.attribute-order.v1";
+const CONFIGURED_API_BASE_URL = String(import.meta.env.VITE_API_BASE_URL ?? "").trim();
+const IS_BROWSER = typeof window !== "undefined";
+const RUNTIME_API_BASE_URL = IS_BROWSER
+  ? `${window.location.protocol}//${window.location.hostname}:3003`
+  : "http://localhost:3003";
+const IS_REMOTE_BROWSER =
+  IS_BROWSER && !["localhost", "127.0.0.1"].includes(String(window.location.hostname ?? "").toLowerCase());
+const IS_LOCALHOST_CONFIG =
+  /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/i.test(CONFIGURED_API_BASE_URL) ||
+  /^localhost(:\d+)?$/i.test(CONFIGURED_API_BASE_URL) ||
+  /^127\.0\.0\.1(:\d+)?$/i.test(CONFIGURED_API_BASE_URL);
+const API_BASE_URL = (
+  IS_REMOTE_BROWSER && IS_LOCALHOST_CONFIG
+    ? RUNTIME_API_BASE_URL
+    : (CONFIGURED_API_BASE_URL || RUNTIME_API_BASE_URL)
+).replace(/\/+$/, "");
 const ADMIN_API_BASE_URL = `${API_BASE_URL}/api/admin`;
 const EMPLOYEES_API_URL = `${ADMIN_API_BASE_URL}/employees`;
 const ORGANIZATIONS_API_URL = `${ADMIN_API_BASE_URL}/organizations`;
@@ -40,10 +59,16 @@ const REPORT_TEMPLATE_SQL_VALIDATE_API_URL = `${ADMIN_API_BASE_URL}/report-templ
 const REPORT_TEMPLATES_SQL_VALIDATE_API_URL = `${ADMIN_API_BASE_URL}/report-templates/sql/validate`;
 const REPORT_TEMPLATE_SQL_RESULTS_API_URL = `${ADMIN_API_BASE_URL}/report-template/sql/results`;
 const REPORT_TEMPLATES_SQL_RESULTS_API_URL = `${ADMIN_API_BASE_URL}/report-templates/sql/results`;
+const REPORT_SQL_RESULTS_PREVIEW_LIMIT = 50;
 const REPORT_TEMPLATE_EXCEL_PREVIEW_API_URL = `${ADMIN_API_BASE_URL}/report-template/excel-preview`;
 const REPORT_TEMPLATES_EXCEL_PREVIEW_API_URL = `${ADMIN_API_BASE_URL}/report-templates/excel-preview`;
 const REPORT_TEMPLATE_EXCEL_API_URL = `${ADMIN_API_BASE_URL}/report-template/excel`;
 const REPORT_TEMPLATES_EXCEL_API_URL = `${ADMIN_API_BASE_URL}/report-templates/excel`;
+const REPORT_CARD_TRANSITION_MS = 2100;
+const SIDE_CARD_TRANSITION_MS = 320;
+const PRINT_FORM_TEMPLATES_API_URL = `${ADMIN_API_BASE_URL}/print-form-templates`;
+const PRINT_FORM_TEMPLATE_CREATE_API_URL = `${ADMIN_API_BASE_URL}/print-form-template`;
+const PRINT_FORM_TEMPLATE_RECOGNIZE_API_URL = `${ADMIN_API_BASE_URL}/print-form-template/recognize`;
 const REPORT_PREVIEW_MAX_RECORDS = 50;
 const REPORT_TEMPLATE_SETTINGS_API_PATH = (reportTemplateId) =>
   `${ADMIN_API_BASE_URL}/report-template/${reportTemplateId}/template-settings`;
@@ -75,10 +100,208 @@ const REPORT_TEMPLATE_ACCESS_GROUP_ADD_API_PATH = (reportTemplateId) =>
   `${ADMIN_API_BASE_URL}/report-template/${reportTemplateId}/access-groups`;
 const REPORT_TEMPLATES_ACCESS_GROUP_ADD_API_PATH = (reportTemplateId) =>
   `${ADMIN_API_BASE_URL}/report-templates/${reportTemplateId}/access-groups`;
+const REPORT_TEMPLATE_RECIPIENT_DELETE_API_PATH = (reportTemplateId, email) =>
+  `${ADMIN_API_BASE_URL}/report-template/${reportTemplateId}/recipients?email=${encodeURIComponent(
+    String(email ?? "")
+  )}`;
+const REPORT_TEMPLATES_RECIPIENT_DELETE_API_PATH = (reportTemplateId, email) =>
+  `${ADMIN_API_BASE_URL}/report-templates/${reportTemplateId}/recipients?email=${encodeURIComponent(
+    String(email ?? "")
+  )}`;
+const REPORT_TEMPLATE_RECIPIENT_ADD_API_PATH = (reportTemplateId) =>
+  `${ADMIN_API_BASE_URL}/report-template/${reportTemplateId}/recipients`;
+const REPORT_TEMPLATES_RECIPIENT_ADD_API_PATH = (reportTemplateId) =>
+  `${ADMIN_API_BASE_URL}/report-templates/${reportTemplateId}/recipients`;
 const REPORT_ACCESS_GROUP_ENUM = Array.from({ length: 10 }, (_, index) => `GRP${String(index + 1).padStart(2, "0")}`);
-const REPORT_SQL_RESULTS_PAGE_SIZE = 500;
+const EMAIL_PATTERN = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 const EMPLOYEES_IMPORT_API_URL = `${ADMIN_API_BASE_URL}/employees/import`;
 const LIST_ORGANIZATIONS_API_URL = `${ADMIN_API_BASE_URL}/list_organizations`;
+const LIST_ORGANIZATION_UNIT_TYPES_API_URL = `${ADMIN_API_BASE_URL}/list_organization_unit_types`;
+const LIST_COUNTRIES_API_URL = `${ADMIN_API_BASE_URL}/list_countries`;
+const ORGANIZATION_DETAILS_API_PATH = (organUnitId) => `${ADMIN_API_BASE_URL}/organization/${organUnitId}`;
+const ORGANIZATION_UPDATE_API_PATH = (organUnitId) => `${ADMIN_API_BASE_URL}/organization/${organUnitId}`;
+const ORGANIZATION_DADATA_REFRESH_API_PATH = (organUnitId) =>
+  `${ADMIN_API_BASE_URL}/organization/${organUnitId}/dadata/refresh`;
+const DADATA_FIELD_DESCRIPTIONS = {
+  value: "Наименование компании",
+  unrestricted_value: "Наименование компании (полное)",
+  "data.inn": "ИНН",
+  "data.kpp": "КПП",
+  "data.kpp_largest": "КПП крупнейшего налогоплательщика",
+  "data.ogrn": "ОГРН",
+  "data.ogrn_date": "Дата выдачи ОГРН",
+  "data.hid": "Внутренний идентификатор",
+  "data.type": "Тип организации",
+  "data.branch_type": "Тип подразделения",
+  "data.branch_count": "Количество филиалов",
+  "data.invalid": "Признак недостоверных сведений",
+  "data.employee_count": "Среднесписочная численность работников",
+  "data.okato": "Код ОКАТО",
+  "data.oktmo": "Код ОКТМО",
+  "data.okpo": "Код ОКПО",
+  "data.okogu": "Код ОКОГУ",
+  "data.okfs": "Код ОКФС",
+  "data.okved": "Код ОКВЭД",
+  "data.okved_type": "Версия справочника ОКВЭД",
+  "data.name.full_with_opf": "Полное наименование",
+  "data.name.short_with_opf": "Краткое наименование",
+  "data.name.latin": "Латинское наименование",
+  "data.name.full": "Полное наименование без ОПФ",
+  "data.name.short": "Краткое наименование без ОПФ",
+  "data.management.name": "Руководитель",
+  "data.management.post": "Должность руководителя",
+  "data.management.start_date": "Дата вступления в должность",
+  "data.state.status": "Статус организации",
+  "data.state.actuality_date": "Дата последних изменений",
+  "data.state.registration_date": "Дата регистрации",
+  "data.state.liquidation_date": "Дата ликвидации",
+  "data.state.code": "Детальный статус",
+  "data.opf.code": "Код ОКОПФ",
+  "data.opf.full": "Полное название ОПФ",
+  "data.opf.short": "Краткое название ОПФ",
+  "data.opf.type": "Версия справочника ОКОПФ",
+  "data.address.value": "Адрес одной строкой",
+  "data.address.unrestricted_value": "Полный адрес с индексом",
+  "data.address.invalidity": "Недостоверность сведений об адресе",
+  "data.address.data.source": "Исходный адрес одной строкой",
+  "data.address.data.result": "Стандартизованный адрес одной строкой",
+  "data.address.data.postal_code": "Индекс",
+  "data.address.data.country": "Страна",
+  "data.address.data.country_iso_code": "ISO-код страны",
+  "data.address.data.federal_district": "Федеральный округ",
+  "data.address.data.region_fias_id": "ФИАС-код региона",
+  "data.address.data.region_kladr_id": "КЛАДР-код региона",
+  "data.address.data.region_iso_code": "ISO-код региона",
+  "data.address.data.region_with_type": "Регион с типом",
+  "data.address.data.region_type": "Тип региона (сокращенный)",
+  "data.address.data.region_type_full": "Тип региона",
+  "data.address.data.region": "Регион",
+  "data.address.data.area_fias_id": "ФИАС-код района",
+  "data.address.data.area_kladr_id": "КЛАДР-код района",
+  "data.address.data.area_with_type": "Район с типом",
+  "data.address.data.area_type": "Тип района (сокращенный)",
+  "data.address.data.area_type_full": "Тип района",
+  "data.address.data.area": "Район",
+  "data.address.data.city_fias_id": "ФИАС-код города",
+  "data.address.data.city_kladr_id": "КЛАДР-код города",
+  "data.address.data.city_with_type": "Город с типом",
+  "data.address.data.city_type": "Тип города (сокращенный)",
+  "data.address.data.city_type_full": "Тип города",
+  "data.address.data.city": "Город",
+  "data.address.data.city_area": "Административный округ",
+  "data.address.data.city_district_fias_id": "ФИАС-код района города",
+  "data.address.data.city_district_kladr_id": "КЛАДР-код района города",
+  "data.address.data.city_district_with_type": "Район города с типом",
+  "data.address.data.city_district_type": "Тип района города (сокращенный)",
+  "data.address.data.city_district_type_full": "Тип района города",
+  "data.address.data.city_district": "Район города",
+  "data.address.data.settlement_fias_id": "ФИАС-код населенного пункта",
+  "data.address.data.settlement_kladr_id": "КЛАДР-код населенного пункта",
+  "data.address.data.settlement_with_type": "Населенный пункт с типом",
+  "data.address.data.settlement_type": "Тип населенного пункта (сокращенный)",
+  "data.address.data.settlement_type_full": "Тип населенного пункта",
+  "data.address.data.settlement": "Населенный пункт",
+  "data.address.data.street_fias_id": "ФИАС-код улицы",
+  "data.address.data.street_kladr_id": "КЛАДР-код улицы",
+  "data.address.data.street_with_type": "Улица с типом",
+  "data.address.data.street_type": "Тип улицы (сокращенный)",
+  "data.address.data.street_type_full": "Тип улицы",
+  "data.address.data.street": "Улица",
+  "data.address.data.stead_fias_id": "ФИАС-код земельного участка",
+  "data.address.data.stead_kladr_id": "КЛАДР-код земельного участка",
+  "data.address.data.stead_cadnum": "Кадастровый номер земельного участка",
+  "data.address.data.stead_type": "Тип земельного участка (сокращенный)",
+  "data.address.data.stead_type_full": "Тип земельного участка",
+  "data.address.data.stead": "Номер земельного участка",
+  "data.address.data.house_fias_id": "ФИАС-код дома",
+  "data.address.data.house_kladr_id": "КЛАДР-код дома",
+  "data.address.data.house_cadnum": "Кадастровый номер дома",
+  "data.address.data.house_type": "Тип дома (сокращенный)",
+  "data.address.data.house_type_full": "Тип дома",
+  "data.address.data.house": "Дом",
+  "data.address.data.house_flat_count": "Количество квартир в доме",
+  "data.address.data.block_type": "Тип корпуса/строения (сокращенный)",
+  "data.address.data.block_type_full": "Тип корпуса/строения",
+  "data.address.data.block": "Корпус/строение",
+  "data.address.data.entrance": "Подъезд",
+  "data.address.data.floor": "Этаж",
+  "data.address.data.flat_fias_id": "ФИАС-код квартиры",
+  "data.address.data.flat_cadnum": "Кадастровый номер квартиры",
+  "data.address.data.flat_type": "Тип квартиры (сокращенный)",
+  "data.address.data.flat_type_full": "Тип квартиры",
+  "data.address.data.flat": "Квартира",
+  "data.address.data.flat_area": "Площадь квартиры",
+  "data.address.data.square_meter_price": "Рыночная стоимость м2",
+  "data.address.data.flat_price": "Рыночная стоимость квартиры",
+  "data.address.data.postal_box": "Абонентский ящик",
+  "data.address.data.room_type": "Тип комнаты (сокращенный)",
+  "data.address.data.room_type_full": "Тип комнаты",
+  "data.address.data.room": "Комната",
+  "data.address.data.fias_id": "ФИАС-код адреса",
+  "data.address.data.fias_code": "Код ФИАС",
+  "data.address.data.fias_level": "Уровень детализации ФИАС",
+  "data.address.data.fias_actuality_state": "Признак актуальности адреса в ФИАС",
+  "data.address.data.kladr_id": "КЛАДР-код адреса",
+  "data.address.data.geoname_id": "Идентификатор объекта в GeoNames",
+  "data.address.data.capital_marker": "Признак центра района/региона",
+  "data.address.data.okato": "Код ОКАТО",
+  "data.address.data.oktmo": "Код ОКТМО",
+  "data.address.data.tax_office": "Код ИФНС для физических лиц",
+  "data.address.data.tax_office_legal": "Код ИФНС для организаций",
+  "data.address.data.timezone": "Часовой пояс",
+  "data.address.data.geo_lat": "Координаты: широта",
+  "data.address.data.geo_lon": "Координаты: долгота",
+  "data.address.data.beltway_hit": "Внутри кольцевой",
+  "data.address.data.beltway_distance": "Расстояние от кольцевой, км",
+  "data.address.data.qc_geo": "Код точности координат",
+  "data.address.data.qc_complete": "Код пригодности к рассылке",
+  "data.address.data.qc_house": "Признак наличия дома в ФИАС",
+  "data.address.data.qc": "Код проверки адреса",
+  "data.address.data.unparsed_parts": "Нераспознанная часть адреса",
+  "data.address.data.metro": "Список ближайших станций метро",
+  "data.address.data.metro[].name": "Название станции метро",
+  "data.address.data.metro[].line": "Название линии метро",
+  "data.address.data.metro[].distance": "Расстояние до станции, км",
+  "data.address.data.divisions": "Компоненты адреса в административном делении",
+  "data.address.data.divisions.administrative.area.name_with_type": "Район региона с типом",
+  "data.address.data.divisions.administrative.city.name_with_type": "Город с типом",
+  "data.address.data.divisions.administrative.city_district.name_with_type": "Район города с типом",
+  "data.address.data.divisions.administrative.settlement.name_with_type": "Населенный пункт с типом",
+  "data.address.data.divisions.administrative.planning_structure.name_with_type":
+    "Планировочная структура с типом",
+  "data.finance.tax_system": "Система налогообложения",
+  "data.finance.income": "Доходы",
+  "data.finance.revenue": "Выручка",
+  "data.finance.expense": "Расходы",
+  "data.finance.debt": "Недоимки по налогам",
+  "data.finance.penalty": "Налоговые штрафы",
+  "data.finance.year": "Год отчетности",
+  "data.okveds": "Коды ОКВЭД дополнительных видов деятельности",
+  "data.authorities": "Сведения о налоговой, ПФР и ФСС",
+  "data.documents": "Документы",
+  "data.licenses": "Лицензии",
+  "data.founders": "Учредители компании",
+  "data.managers": "Руководители компании",
+  "data.predecessors": "Правопредшественники",
+  "data.successors": "Правопреемники",
+  "data.phones": "Телефоны",
+  "data.emails": "Адреса электронной почты"
+};
+const DADATA_ORGANIZATION_STATUS_DESCRIPTIONS = {
+  ACTIVE: "Действующая",
+  LIQUIDATING: "Ликвидируется",
+  LIQUIDATED: "Ликвидирована",
+  BANKRUPT: "Банкротство",
+  REORGANIZING: "В процессе реорганизации"
+};
+const DADATA_BRANCH_TYPE_DESCRIPTIONS = {
+  MAIN: "Головная организация",
+  BRANCH: "Филиал"
+};
+const DADATA_ORGANIZATION_TYPE_DESCRIPTIONS = {
+  LEGAL: "Юрлицо",
+  INDIVIDUAL: "Индивидуальный предприниматель"
+};
 const LIST_RELATIONS_API_URL = `${ADMIN_API_BASE_URL}/list_relations`;
 const LIST_PRODUCT_GROUPS_API_URL = `${ADMIN_API_BASE_URL}/list_product_groups`;
 const LIST_POSITIONS_API_URL = `${ADMIN_API_BASE_URL}/list_positions`;
@@ -104,19 +327,26 @@ const PAGE_IDS = {
   EMPLOYEES: "employees",
   ORGANIZATIONS: "organizations",
   EMPLOYEE_RELATIONS: "employee-relations",
-  REPORT_SETTINGS: "report-settings"
+  REPORT_SETTINGS: "report-settings",
+  PRINT_FORMS: "print-forms"
 };
 const PAGE_TITLES = {
   [PAGE_IDS.EMPLOYEES]: "Список сотрудников",
   [PAGE_IDS.ORGANIZATIONS]: "Список организаций",
   [PAGE_IDS.EMPLOYEE_RELATIONS]: "Список связей сотрудников",
-  [PAGE_IDS.REPORT_SETTINGS]: "Настройка отчетов"
+  [PAGE_IDS.REPORT_SETTINGS]: "Настройка отчетов",
+  [PAGE_IDS.PRINT_FORMS]: "Шаблоны печатных форм"
 };
 const PAGE_PATHNAMES = {
   [PAGE_IDS.EMPLOYEES]: "/employees",
   [PAGE_IDS.ORGANIZATIONS]: "/organizations",
   [PAGE_IDS.EMPLOYEE_RELATIONS]: "/employee-relations",
-  [PAGE_IDS.REPORT_SETTINGS]: "/report-settings"
+  [PAGE_IDS.REPORT_SETTINGS]: "/report-settings",
+  [PAGE_IDS.PRINT_FORMS]: "/print-forms"
+};
+const PRINT_FORMS_TABS = {
+  LIST: "list",
+  CREATE: "create"
 };
 const RELATION_COLUMNS = [
   { key: "organName", title: "Организация" },
@@ -187,6 +417,23 @@ const INITIAL_EMPLOYEE_CARD_EDIT_FORM = {
   personalNumber: "",
   status: "ACTIVE"
 };
+const INITIAL_ORGANIZATION_CARD_EDIT_FORM = {
+  sapId: "",
+  inn: "",
+  kpp: "",
+  name: "",
+  shName: "",
+  ogrn: "",
+  okpo: "",
+  shortCode: "",
+  signResident: "НЕТ",
+  countryId: "",
+  organUnitTypeIds: [],
+  address: "",
+  kcehNumber: "",
+  claimPrefix: "",
+  fastTrack: ""
+};
 const INITIAL_REPORT_MAIN_SETTINGS_DRAFT = {
   codeReport: "",
   name: "",
@@ -226,6 +473,7 @@ const ORGANIZATION_COLUMNS = [
   { key: "sapId", title: "sap_id", sortField: "sapId" },
   { key: "name", title: "Наименование", sortField: "name" },
   { key: "shName", title: "Краткое наименование", sortField: "shName" },
+  { key: "organUnitTypeNames", title: "Тип организации", sortField: "organUnitTypeNames" },
   { key: "inn", title: "ИНН", sortField: "inn" },
   { key: "kpp", title: "КПП", sortField: "kpp" },
   { key: "ogrn", title: "ОГРН", sortField: "ogrn" },
@@ -345,9 +593,30 @@ const REPORT_TEMPLATE_GENERAL_SETTINGS_SORT_DIRECTIONS = {
   ASC: "ASC",
   DESC: "DESC"
 };
+const REPORT_TEMPLATE_GENERAL_SETTINGS_ROWS = [
+  { key: "showLogoReport", label: "Отображение логотипа", type: "boolean" },
+  { key: "headerCaption", label: "Заголовок отчета", type: "text" },
+  { key: "headerFontSize", label: "Размер шрифта заголовка отчета, px", type: "number" },
+  { key: "headerFontColor", label: "Цвет шрифта заголовка отчета", type: "color" },
+  { key: "heightTabCaption", label: "Высота табличного заголовка, px", type: "number" },
+  { key: "backTabCaptionColor", label: "Цвет фона табличного заголовка", type: "color" },
+  { key: "fontTabCaptionColor", label: "Цвет шрифта табличного заголовка", type: "color" },
+  { key: "fontTabCaptionSize", label: "Размер шрифта табличного заголовка, px", type: "number" },
+  { key: "recordFontSize", label: "Размер шрифта записей таблицы, px", type: "number" },
+  { key: "startReportRow", label: "Номер начальной строки отчета", type: "number" },
+  { key: "startReportCol", label: "Номер начальной колонки отчета", type: "number" },
+  { key: "filtrSet", label: "Включить фильтр", type: "boolean" }
+];
+const REPORT_TEMPLATE_GENERAL_SETTINGS_ROWS_ASC = [...REPORT_TEMPLATE_GENERAL_SETTINGS_ROWS].sort((left, right) =>
+  left.label.localeCompare(right.label, "ru-RU", {
+    sensitivity: "base",
+    numeric: true
+  })
+);
 const REPORT_TEMPLATE_JSON_LINE_HEIGHT_PX = 18;
 const REPORT_TEMPLATE_JSON_PADDING_PX = 10;
 const REPORT_TEMPLATE_JSON_GUTTER_WIDTH_PX = 48;
+const REPORT_TEMPLATE_JSON_BASE_FONT_SIZE_PX = 13;
 const INITIAL_FILTERS = {
   sapId: "",
   fullName: "",
@@ -367,6 +636,7 @@ const ORGANIZATION_INITIAL_FILTERS = {
   sapId: "",
   name: "",
   shName: "",
+  organUnitTypeNames: [],
   inn: "",
   kpp: "",
   ogrn: "",
@@ -412,6 +682,7 @@ const ORGANIZATION_DEFAULT_COLUMN_WIDTHS = {
   sapId: 130,
   name: 320,
   shName: 240,
+  organUnitTypeNames: 260,
   inn: 140,
   kpp: 140,
   ogrn: 160,
@@ -443,6 +714,7 @@ const RELATION_COMBO_VISIBLE_OPTION_COUNT = 15;
 const RELATION_COMBO_OPTION_HEIGHT_PX = 32;
 const RELATION_COMBO_MENU_PADDING_PX = 12;
 const URL_EMPLOYEE_ID_PARAM = "employeeId";
+const URL_ORGANIZATION_ID_PARAM = "organUnitId";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 const normalizePathname = (value) => {
@@ -475,6 +747,11 @@ const setPageIdToUrl = (pageId) => {
 };
 
 const normalizeEmployeeId = (value) => {
+  const normalized = String(value ?? "").trim();
+  return UUID_PATTERN.test(normalized) ? normalized : "";
+};
+
+const normalizeOrganizationId = (value) => {
   const normalized = String(value ?? "").trim();
   return UUID_PATTERN.test(normalized) ? normalized : "";
 };
@@ -518,6 +795,47 @@ const buildEmployeeCardUrl = (employeeId) => {
   const params = new URLSearchParams();
   params.set(URL_EMPLOYEE_ID_PARAM, normalized);
   return `${PAGE_PATHNAMES[PAGE_IDS.EMPLOYEES]}?${params.toString()}`;
+};
+
+const buildOrganizationCardUrl = (organUnitId) => {
+  if (typeof window === "undefined") {
+    return "#";
+  }
+  const normalized = normalizeOrganizationId(organUnitId);
+  if (!normalized) {
+    return "#";
+  }
+  const params = new URLSearchParams();
+  params.set(URL_ORGANIZATION_ID_PARAM, normalized);
+  return `${PAGE_PATHNAMES[PAGE_IDS.ORGANIZATIONS]}?${params.toString()}`;
+};
+
+const getOrganizationIdFromUrl = () => {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  const params = new URLSearchParams(window.location.search);
+  return (
+    normalizeOrganizationId(params.get(URL_ORGANIZATION_ID_PARAM)) ||
+    normalizeOrganizationId(params.get("organ_unit_id"))
+  );
+};
+
+const setOrganizationIdToUrl = (organUnitId) => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const params = new URLSearchParams(window.location.search);
+  const normalized = normalizeOrganizationId(organUnitId);
+  if (normalized) {
+    params.set(URL_ORGANIZATION_ID_PARAM, normalized);
+  } else {
+    params.delete(URL_ORGANIZATION_ID_PARAM);
+    params.delete("organ_unit_id");
+  }
+  const query = params.toString();
+  const nextUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
+  window.history.replaceState(window.history.state, "", nextUrl);
 };
 
 const hasAnyEmployeeListFilter = (filters) =>
@@ -784,7 +1102,7 @@ const reconcileReportTemplateFieldsWithSqlColumns = (
   };
 };
 
-const loadSqlColumnsForReportTemplate = async (reportTemplateId) => {
+const loadSqlColumnsForReportTemplate = async (reportTemplateId, executionPayload = {}) => {
   let response = await fetch(REPORT_TEMPLATE_SQL_RESULTS_API_URL, {
     method: "POST",
     headers: {
@@ -794,7 +1112,8 @@ const loadSqlColumnsForReportTemplate = async (reportTemplateId) => {
       toCamelApiPayload({
         reportTemplateId,
         limit: 1,
-        offset: 1
+        offset: 1,
+        ...(executionPayload && typeof executionPayload === "object" ? executionPayload : {})
       })
     )
   });
@@ -808,14 +1127,19 @@ const loadSqlColumnsForReportTemplate = async (reportTemplateId) => {
         toCamelApiPayload({
           reportTemplateId,
           limit: 1,
-          offset: 1
+          offset: 1,
+          ...(executionPayload && typeof executionPayload === "object" ? executionPayload : {})
         })
       )
     });
   }
   const data = await response.json();
   if (!response.ok) {
-    throw new Error(String(data?.error ?? "Не удалось получить поля SQL-скрипта"));
+    const errorMessage = String(data?.error ?? "").trim();
+    if (/сохраненн(ый|ого)\s+sql-скрипт\s+пуст/i.test(errorMessage)) {
+      return [];
+    }
+    throw new Error(errorMessage || "Не удалось получить поля SQL-скрипта");
   }
   const columns = Array.isArray(data?.columns)
     ? data.columns.map((value) => String(value ?? "").trim()).filter(Boolean)
@@ -831,6 +1155,7 @@ const normalizeEmployeePositionItem = (value) => {
   return {
     ...source,
     employeeOrganId: String(source.employeeOrganId ?? source.employee_organ_id ?? "").trim(),
+    organUnitId: String(source.organUnitId ?? source.organ_unit_id ?? "").trim(),
     bossId: String(source.bossId ?? source.boss_id ?? "").trim(),
     bossName: normalizeUiText(source.bossName ?? source.boss_name),
     organName: normalizeUiText(source.organName ?? source.organ_name),
@@ -1178,6 +1503,9 @@ function parseStoredOrganizationFilters() {
       sapId: String(parsed.sapId ?? ""),
       name: String(parsed.name ?? ""),
       shName: String(parsed.shName ?? ""),
+      organUnitTypeNames: Array.isArray(parsed.organUnitTypeNames)
+        ? parsed.organUnitTypeNames.map((item) => String(item ?? "").trim()).filter(Boolean)
+        : [],
       inn: String(parsed.inn ?? ""),
       kpp: String(parsed.kpp ?? ""),
       ogrn: String(parsed.ogrn ?? ""),
@@ -1604,6 +1932,99 @@ function parseStoredReportTemplateGeneralSortDirection() {
   return REPORT_TEMPLATE_GENERAL_SETTINGS_SORT_DIRECTIONS.ASC;
 }
 
+function parseStoredReportTemplateLevelExpandedMap() {
+  if (typeof window === "undefined") {
+    return {};
+  }
+  try {
+    const rawValue = window.localStorage.getItem(REPORT_TEMPLATE_LEVEL_EXPANDED_STORAGE_KEY);
+    if (!rawValue) {
+      return {};
+    }
+    const parsed = JSON.parse(rawValue);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function parseStoredDadataHiddenAttributes() {
+  if (!IS_BROWSER) {
+    return {};
+  }
+  try {
+    const rawValue = window.localStorage.getItem(DADATA_HIDDEN_ATTRIBUTES_STORAGE_KEY);
+    if (!rawValue) {
+      return {};
+    }
+    const parsed = JSON.parse(rawValue);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
+    const out = {};
+    Object.entries(parsed).forEach(([key, value]) => {
+      if (value === true) {
+        out[String(key)] = true;
+      }
+    });
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function parseStoredDadataVisibleOnly() {
+  if (!IS_BROWSER) {
+    return true;
+  }
+  try {
+    const rawValue = String(window.localStorage.getItem(DADATA_VISIBLE_ONLY_STORAGE_KEY) ?? "").trim();
+    if (rawValue === "false") {
+      return false;
+    }
+    if (rawValue === "true") {
+      return true;
+    }
+    return true;
+  } catch {
+    return true;
+  }
+}
+
+function normalizeDadataOrderKey(value) {
+  return String(value ?? "")
+    .trim()
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .toLowerCase();
+}
+
+function parseStoredDadataAttributeOrder() {
+  if (!IS_BROWSER) {
+    return { company: [], address: [] };
+  }
+  try {
+    const rawValue = window.localStorage.getItem(DADATA_ATTRIBUTE_ORDER_STORAGE_KEY);
+    if (!rawValue) {
+      return { company: [], address: [] };
+    }
+    const parsed = JSON.parse(rawValue);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { company: [], address: [] };
+    }
+    const normalizeList = (value) =>
+      (Array.isArray(value) ? value : [])
+        .map((item) => normalizeDadataOrderKey(item))
+        .filter(Boolean)
+        .filter((item, index, source) => source.indexOf(item) === index);
+    return {
+      company: normalizeList(parsed.company),
+      address: normalizeList(parsed.address)
+    };
+  } catch {
+    return { company: [], address: [] };
+  }
+}
+
 function compareUtf8ByteOrder(left, right) {
   const encoder = new TextEncoder();
   const leftBytes = encoder.encode(String(left ?? ""));
@@ -1647,6 +2068,7 @@ function getEmployeeDerivedPositionData(row) {
 
   if (positions.length === 0) {
     return {
+      organUnitId: "",
       organName: "",
       departName: "",
       positionName: "",
@@ -1659,6 +2081,7 @@ function getEmployeeDerivedPositionData(row) {
 
   if (positions.length === 1) {
     return {
+      organUnitId: String(positions[0]?.organUnitId ?? positions[0]?.organ_unit_id ?? ""),
       organName: String(positions[0]?.organName ?? ""),
       departName: String(positions[0]?.departName ?? ""),
       positionName: String(positions[0]?.positionName ?? ""),
@@ -1689,6 +2112,7 @@ function getEmployeeDerivedPositionData(row) {
       : `подразделений: ${uniqueSortedDepartNames.length}`;
 
   return {
+    organUnitId: "",
     organName: organDisplayValue,
     departName: departDisplayValue,
     positionName: "",
@@ -1799,11 +2223,92 @@ function stripExpectedExtension(fileNameValue, extensionValue) {
   return fileName;
 }
 
+const ReportSqlResultsContent = ({
+  isLoading,
+  error,
+  columns,
+  rows,
+  getSortDirectionForField,
+  getSortOrderForField,
+  onSortClick,
+  formatCellValue
+}) => {
+  if (isLoading) {
+    return (
+      <div className="report-sql-results-loader">
+        <div
+          className="report-sql-execution-loader"
+          aria-label="Идет выполнение SQL-скрипта"
+        />
+        <p>Выполняется SQL-скрипт...</p>
+      </div>
+    );
+  }
+  if (error) {
+    return <div className="report-sql-results-empty-state">{error}</div>;
+  }
+  if (columns.length === 0) {
+    return <div className="report-sql-results-empty-state">Результаты не найдены</div>;
+  }
+  return (
+    <table className="report-sql-results-table">
+      <thead>
+        <tr>
+          <th className="report-sql-results-row-number-header">№</th>
+          {columns.map((columnName) => (
+            <th key={columnName}>
+              <button
+                type="button"
+                className={`column-sort-button${
+                  getSortDirectionForField(columnName) ? " active" : ""
+                }`}
+                onClick={() => onSortClick(columnName)}
+              >
+                <span>{columnName}</span>
+                {getSortDirectionForField(columnName) && (
+                  <span className="sort-icon-group">
+                    <span className="sort-icon">
+                      {getSortDirectionForField(columnName) === "ASC" ? "▲" : "▼"}
+                    </span>
+                    {getSortOrderForField(columnName) && (
+                      <span className="sort-order-index">
+                        {getSortOrderForField(columnName)}
+                      </span>
+                    )}
+                  </span>
+                )}
+              </button>
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row, rowIndex) => (
+          <tr key={`report-sql-row-${rowIndex}`}>
+            <td className="report-sql-results-row-number-cell">{rowIndex + 1}</td>
+            {columns.map((columnName) => (
+              <td key={`report-sql-cell-${rowIndex}-${columnName}`}>
+                {formatCellValue(row?.[columnName])}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+};
+
+const MemoizedReportSqlResultsContent = memo(ReportSqlResultsContent);
+
 function App() {
   const initialPageId = getPageIdFromUrl();
   const EMPLOYEE_CARD_TABS = {
     MAIN: "main",
     RELATIONS: "relations"
+  };
+  const ORGANIZATION_CARD_TABS = {
+    MAIN: "main",
+    DADATA: "dadata"
   };
 const REPORT_SQL_BASE_FONT_SIZE_PX = 13;
 const REPORT_SQL_EDITOR_PADDING_PX = 12;
@@ -1834,8 +2339,15 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
       month: "2-digit",
       year: "numeric"
     });
+    const weekdayRaw = now.toLocaleDateString("ru-RU", {
+      weekday: "long"
+    });
+    const weekday =
+      typeof weekdayRaw === "string" && weekdayRaw.length > 0
+        ? `${weekdayRaw.slice(0, 1).toUpperCase()}${weekdayRaw.slice(1)}`
+        : "";
 
-    return { time, date };
+    return { time, date, weekday };
   };
 
   const [loading, setLoading] = useState(false);
@@ -1851,6 +2363,37 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
   const [isParticipantsExpanded, setIsParticipantsExpanded] = useState(true);
   const [isReportBuilderExpanded, setIsReportBuilderExpanded] = useState(true);
   const [activePage, setActivePage] = useState(initialPageId);
+  const [activePrintFormsTab, setActivePrintFormsTab] = useState(PRINT_FORMS_TABS.LIST);
+  const [printFormsLoading, setPrintFormsLoading] = useState(false);
+  const [printFormsError, setPrintFormsError] = useState("");
+  const [printFormsItems, setPrintFormsItems] = useState([]);
+  const [printFormsRefreshToken, setPrintFormsRefreshToken] = useState(0);
+  const [printFormName, setPrintFormName] = useState("");
+  const [printFormCode, setPrintFormCode] = useState("");
+  const [printFormDescription, setPrintFormDescription] = useState("");
+  const [printFormDataSql, setPrintFormDataSql] = useState("select 1 as sample_value");
+  const [printFormFieldMappingText, setPrintFormFieldMappingText] = useState(
+    `[
+  { "sourceField": "sample_value", "page": 1, "x": 80, "y": 720, "fontSize": 12 }
+]`
+  );
+  const [printFormOverlaySettingsText, setPrintFormOverlaySettingsText] = useState(
+    `{
+  "enabled": true,
+  "text": "Черновик",
+  "page": "ALL",
+  "x": 40,
+  "y": 24,
+  "fontSize": 10,
+  "opacity": 0.35,
+  "color": "#6b7280"
+}`
+  );
+  const [printFormPdfName, setPrintFormPdfName] = useState("");
+  const [printFormPdfBase64, setPrintFormPdfBase64] = useState("");
+  const [isPrintFormSaving, setIsPrintFormSaving] = useState(false);
+  const [isPrintFormRecognizing, setIsPrintFormRecognizing] = useState(false);
+  const [printFormDetectedFields, setPrintFormDetectedFields] = useState([]);
   const [isDarkThemeEnabled, setIsDarkThemeEnabled] = useState(() => {
     if (typeof window === "undefined") {
       return false;
@@ -1862,7 +2405,6 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
   const [employeesLoading, setEmployeesLoading] = useState(false);
   const [employeesError, setEmployeesError] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageJumpInput, setPageJumpInput] = useState("1");
   const [pageSize, setPageSize] = useState(() => {
     if (typeof window === "undefined") {
       return 20;
@@ -1944,9 +2486,41 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [selectedEmployeeSnapshot, setSelectedEmployeeSnapshot] = useState(null);
   const [isEmployeeCardPanelOpen, setIsEmployeeCardPanelOpen] = useState(false);
+  const [selectedOrganizationId, setSelectedOrganizationId] = useState("");
+  const [selectedOrganizationSnapshot, setSelectedOrganizationSnapshot] = useState(null);
+  const [isOrganizationCardPanelOpen, setIsOrganizationCardPanelOpen] = useState(false);
+  const [activeOrganizationCardTab, setActiveOrganizationCardTab] = useState(ORGANIZATION_CARD_TABS.MAIN);
+  const [isOrganizationCardEditMode, setIsOrganizationCardEditMode] = useState(false);
+  const [isOrganizationDadataRefreshing, setIsOrganizationDadataRefreshing] = useState(false);
+  const [dadataHiddenAttributes, setDadataHiddenAttributes] = useState(() =>
+    parseStoredDadataHiddenAttributes()
+  );
+  const [isDadataVisibleOnlyEnabled, setIsDadataVisibleOnlyEnabled] = useState(() =>
+    parseStoredDadataVisibleOnly()
+  );
+  const [dadataAttributeOrderMap, setDadataAttributeOrderMap] = useState(() =>
+    parseStoredDadataAttributeOrder()
+  );
+  const [dadataDraggingRowKey, setDadataDraggingRowKey] = useState("");
+  const [selectedDadataRowBySection, setSelectedDadataRowBySection] = useState({
+    company: "",
+    address: ""
+  });
+  const [organizationDadataCollapsedSections, setOrganizationDadataCollapsedSections] = useState({
+    company: false,
+    address: false
+  });
+  const [organizationCardEditForm, setOrganizationCardEditForm] = useState(
+    INITIAL_ORGANIZATION_CARD_EDIT_FORM
+  );
+  const [activeOrganizationEditCombo, setActiveOrganizationEditCombo] = useState(null);
+  const [organizationTypeEditFilter, setOrganizationTypeEditFilter] = useState("");
+  const [countryEditFilter, setCountryEditFilter] = useState("");
   const [selectedReportTemplateId, setSelectedReportTemplateId] = useState("");
   const [selectedReportSnapshot, setSelectedReportSnapshot] = useState(null);
   const [isReportCardPanelOpen, setIsReportCardPanelOpen] = useState(false);
+  const [isReportCardTransitioning, setIsReportCardTransitioning] = useState(false);
+  const [isEmployeeCardTransitioning, setIsEmployeeCardTransitioning] = useState(false);
   const [isCreatingReportCard, setIsCreatingReportCard] = useState(false);
   const [isReportMainSettingsEditMode, setIsReportMainSettingsEditMode] = useState(false);
   const [isReportMainSettingsSaving, setIsReportMainSettingsSaving] = useState(false);
@@ -1993,24 +2567,32 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
   const [isReportTemplateSettingsLoading, setIsReportTemplateSettingsLoading] = useState(false);
   const [hasReportTemplateContentLoaded, setHasReportTemplateContentLoaded] = useState(false);
   const [isReportTemplateSettingsSaving, setIsReportTemplateSettingsSaving] = useState(false);
+  const [isReportTemplateSqlSyncing, setIsReportTemplateSqlSyncing] = useState(false);
   const [isReportTemplateEditMode, setIsReportTemplateEditMode] = useState(false);
   const [reportTemplateViewMode, setReportTemplateViewMode] = useState(REPORT_TEMPLATE_VIEW_MODES.SETTINGS);
   const [isReportTemplateJsonEditMode, setIsReportTemplateJsonEditMode] = useState(false);
   const [reportTemplateJsonInitial, setReportTemplateJsonInitial] = useState("{}");
   const [reportTemplateJsonDraft, setReportTemplateJsonDraft] = useState("{}");
+  const [reportTemplateJsonZoom, setReportTemplateJsonZoom] = useState(1);
   const [reportTemplateJsonActiveLine, setReportTemplateJsonActiveLine] = useState(1);
   const [reportTemplateJsonEditorScrollTop, setReportTemplateJsonEditorScrollTop] = useState(0);
+  const [isReportTemplateLevelTwoExpanded, setIsReportTemplateLevelTwoExpanded] = useState(false);
+  const [isReportTemplateLevelThreeExpanded, setIsReportTemplateLevelThreeExpanded] = useState(false);
   const [deletingReportOrganizationId, setDeletingReportOrganizationId] = useState("");
   const [deletingReportAccessGroupCode, setDeletingReportAccessGroupCode] = useState("");
+  const [deletingReportRecipientEmail, setDeletingReportRecipientEmail] = useState("");
   const [addingReportOrganization, setAddingReportOrganization] = useState(false);
   const [addingReportAccessGroup, setAddingReportAccessGroup] = useState(false);
+  const [addingReportRecipient, setAddingReportRecipient] = useState(false);
   const [isReportOrganizationAddMode, setIsReportOrganizationAddMode] = useState(false);
   const [isReportOrganizationComboOpen, setIsReportOrganizationComboOpen] = useState(false);
   const [isReportAccessGroupAddMode, setIsReportAccessGroupAddMode] = useState(false);
+  const [isReportRecipientAddMode, setIsReportRecipientAddMode] = useState(false);
   const [reportOrganizationSearch, setReportOrganizationSearch] = useState("");
   const [reportOrganizationOptions, setReportOrganizationOptions] = useState([]);
   const [selectedReportOrganizationIdForAdd, setSelectedReportOrganizationIdForAdd] = useState("");
   const [newReportAccessGroupCode, setNewReportAccessGroupCode] = useState(REPORT_ACCESS_GROUP_ENUM[0]);
+  const [newReportRecipientEmail, setNewReportRecipientEmail] = useState("");
   const [reportTemplateSettingsInitial, setReportTemplateSettingsInitial] = useState(() =>
     buildDefaultReportTemplateSettings("")
   );
@@ -2047,6 +2629,13 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     () => initialPageId === PAGE_IDS.EMPLOYEES && Boolean(getEmployeeIdFromUrl())
   );
   const [hasLinkedEmployeeLookupAttempt, setHasLinkedEmployeeLookupAttempt] = useState(false);
+  const [linkedOrganizationIdFilter, setLinkedOrganizationIdFilter] = useState(() =>
+    initialPageId === PAGE_IDS.ORGANIZATIONS ? getOrganizationIdFromUrl() : ""
+  );
+  const [isLinkedOrganizationLookupActive, setIsLinkedOrganizationLookupActive] = useState(
+    () => initialPageId === PAGE_IDS.ORGANIZATIONS && Boolean(getOrganizationIdFromUrl())
+  );
+  const [hasLinkedOrganizationLookupAttempt, setHasLinkedOrganizationLookupAttempt] = useState(false);
   const [activeEmployeeCardTab, setActiveEmployeeCardTab] = useState(EMPLOYEE_CARD_TABS.MAIN);
   const [isEmployeeCardEditMode, setIsEmployeeCardEditMode] = useState(false);
   const [employeeRelations, setEmployeeRelations] = useState([]);
@@ -2068,6 +2657,7 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
   const [salesOrganizationOptions, setSalesOrganizationOptions] = useState([]);
   const [productGroupOptions, setProductGroupOptions] = useState([]);
   const [pendingEmployeeDelete, setPendingEmployeeDelete] = useState(null);
+  const [pendingOrganizationDelete, setPendingOrganizationDelete] = useState(null);
   const [pendingRelationDelete, setPendingRelationDelete] = useState(null);
   const [pendingPositionDelete, setPendingPositionDelete] = useState(null);
 
@@ -2132,6 +2722,41 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
       status: normalizedStatus === "INACTIVE" ? "INACTIVE" : "ACTIVE"
     };
   }, []);
+  const getOrganizationCardEditFormFromOrganization = useCallback((organization) => {
+    const signResidentRaw = String(organization?.signResident ?? organization?.sign_resident ?? "")
+      .trim()
+      .toUpperCase();
+    const signResident = signResidentRaw === "ДА" ? "ДА" : "НЕТ";
+    const fastTrackRaw = String(organization?.fastTrack ?? organization?.fast_track ?? "")
+      .trim()
+      .toUpperCase();
+    const fastTrack = fastTrackRaw === "ДА" ? "ДА" : fastTrackRaw === "НЕТ" ? "НЕТ" : "";
+    const sourceTypes = Array.isArray(organization?.organUnitTypes)
+      ? organization.organUnitTypes
+      : Array.isArray(organization?.organ_unit_types)
+        ? organization.organ_unit_types
+        : [];
+    const typeIds = sourceTypes
+      .map((item) => String(item?.organUnitTypeId ?? item?.organ_unit_type_id ?? "").trim())
+      .filter(Boolean);
+    return {
+      sapId: String(organization?.sapId ?? organization?.sap_id ?? "").trim(),
+      inn: String(organization?.inn ?? "").trim(),
+      kpp: String(organization?.kpp ?? "").trim(),
+      name: String(organization?.name ?? "").trim(),
+      shName: String(organization?.shName ?? organization?.sh_name ?? "").trim(),
+      ogrn: String(organization?.ogrn ?? "").trim(),
+      okpo: String(organization?.okpo ?? "").trim(),
+      shortCode: String(organization?.shortCode ?? organization?.short_code ?? "").trim(),
+      signResident,
+      countryId: String(organization?.countryId ?? organization?.country_id ?? "").trim(),
+      organUnitTypeIds: typeIds,
+      address: String(organization?.address ?? "").trim(),
+      kcehNumber: String(organization?.kcehNumber ?? organization?.kceh_number ?? "").trim(),
+      claimPrefix: String(organization?.claimPrefix ?? organization?.claim_prefix ?? "").trim(),
+      fastTrack
+    };
+  }, []);
   const [isAddingEmployeePosition, setIsAddingEmployeePosition] = useState(false);
   const [editingEmployeePositionId, setEditingEmployeePositionId] = useState("");
   const [newEmployeePositionForm, setNewEmployeePositionForm] = useState(INITIAL_NEW_POSITION_FORM);
@@ -2139,8 +2764,13 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
   const [positionTitleOptions, setPositionTitleOptions] = useState([]);
   const [positionEmployeeOptions, setPositionEmployeeOptions] = useState([]);
   const [relationEmployeeOptions, setRelationEmployeeOptions] = useState([]);
+  const [organizationUnitTypeOptions, setOrganizationUnitTypeOptions] = useState([]);
+  const [organizationUnitTypeCatalog, setOrganizationUnitTypeCatalog] = useState([]);
+  const [countryOptions, setCountryOptions] = useState([]);
+  const [isOrganizationTypeFilterOpen, setIsOrganizationTypeFilterOpen] = useState(false);
   const [activeNewPositionCombo, setActiveNewPositionCombo] = useState(null);
   const [positionComboMenuLayouts, setPositionComboMenuLayouts] = useState({});
+  const [organizationEditComboMenuLayouts, setOrganizationEditComboMenuLayouts] = useState({});
   const [employeeRelationsColumnWidths, setEmployeeRelationsColumnWidths] = useState(() =>
     parseStoredRelationColumnWidths()
   );
@@ -2151,6 +2781,7 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
   const positionsTableWrapperRef = useRef(null);
   const relationComboInputRefs = useRef({});
   const positionComboInputRefs = useRef({});
+  const organizationEditComboInputRefs = useRef({});
   const reportOrganizationComboRef = useRef(null);
   const reportSqlEditorRef = useRef(null);
   const reportSqlGutterRef = useRef(null);
@@ -2162,10 +2793,24 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
   const reportTemplateFieldsResizeRef = useRef(null);
   const reportTemplateFieldsDragSourceRef = useRef(null);
   const reportTemplateFieldsDragImageRef = useRef(null);
+  const reportTemplateFieldsDragAutoScrollStateRef = useRef({
+    rafId: 0,
+    wrapper: null,
+    direction: 0,
+    speed: 0
+  });
   const reportTemplateJsonTextareaRef = useRef(null);
+  const reportTemplateJsonCaretRafRef = useRef(0);
   const reportTemplateJsonFileInputRef = useRef(null);
+  const reportCardTransitionTimeoutRef = useRef(0);
+  const employeeCardTransitionTimeoutRef = useRef(0);
+  const employeeCardCloseCleanupTimeoutRef = useRef(0);
+  const employeeListSnapshotRef = useRef(null);
+  const reportSettingsListSnapshotRef = useRef(null);
   const reportTemplateSettingsLoadedForIdRef = useRef("");
   const reportSqlResultsRequestRef = useRef(0);
+  const selectedOrganizationRowRef = useRef(null);
+  const pageJumpInputRef = useRef(null);
   const reportSqlResultsLastScrollTopRef = useRef(0);
   const lastAutoValidatedReportSqlRef = useRef("");
   const relationOptionsRequestRef = useRef({ employee: 0, organ: 0, sales: 0 });
@@ -2184,6 +2829,14 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     sales: false,
     product: false
   });
+  useEffect(
+    () => () => {
+      if (reportTemplateJsonCaretRafRef.current) {
+        cancelAnimationFrame(reportTemplateJsonCaretRafRef.current);
+      }
+    },
+    []
+  );
   const lastConfirmedOrganRef = useRef({
     id: "",
     name: "",
@@ -2201,6 +2854,16 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
   const mainPanelRef = useRef(null);
   const bottomPanelRef = useRef(null);
   const administrationButtonRef = useRef(null);
+  const organizationDadataAutoRefreshAttemptedRef = useRef(new Set());
+  const organizationDadataCompanyTableWrapperRef = useRef(null);
+  const organizationDadataAddressTableWrapperRef = useRef(null);
+  const dadataDragAutoScrollStateRef = useRef({
+    rafId: 0,
+    wrapper: null,
+    direction: 0,
+    speed: 0
+  });
+  const dadataDraggingSectionRef = useRef("");
   const [settingsPanelBounds, setSettingsPanelBounds] = useState({ top: 80, bottom: 24 });
   const [administrationPanelPosition, setAdministrationPanelPosition] = useState({ top: 0, left: 0 });
   const [cellTooltip, setCellTooltip] = useState({
@@ -2215,12 +2878,42 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     x: 0,
     y: 0
   });
+  const buttonTooltipElementRef = useRef(null);
+  const buttonTooltipVisibleRef = useRef(false);
+  const buttonTooltipMoveRafRef = useRef(0);
+  const buttonTooltipPendingPositionRef = useRef({ x: 0, y: 0 });
   const [nowDisplay, setNowDisplay] = useState(() => formatNow());
   const currentPageTitle = PAGE_TITLES[activePage] ?? PAGE_TITLES[PAGE_IDS.EMPLOYEES];
   const isEmployeesPage = activePage === PAGE_IDS.EMPLOYEES;
   const isOrganizationsPage = activePage === PAGE_IDS.ORGANIZATIONS;
   const isEmployeeRelationsPage = activePage === PAGE_IDS.EMPLOYEE_RELATIONS;
   const isReportSettingsPage = activePage === PAGE_IDS.REPORT_SETTINGS;
+  const isEmployeeOrganizationPage = isEmployeesPage || isOrganizationsPage;
+  const isPrintFormsPage = activePage === PAGE_IDS.PRINT_FORMS;
+  const isMainGridCellTooltipEnabled = !isOrganizationsPage;
+
+  const scheduleButtonTooltipPositionUpdate = useCallback((clientX, clientY) => {
+    if (!Number.isFinite(clientX) || !Number.isFinite(clientY)) {
+      return;
+    }
+    buttonTooltipPendingPositionRef.current = {
+      x: clientX + 12,
+      y: clientY + 12
+    };
+    if (buttonTooltipMoveRafRef.current) {
+      return;
+    }
+    buttonTooltipMoveRafRef.current = requestAnimationFrame(() => {
+      buttonTooltipMoveRafRef.current = 0;
+      const tooltipElement = buttonTooltipElementRef.current;
+      if (!(tooltipElement instanceof HTMLElement)) {
+        return;
+      }
+      const nextPosition = buttonTooltipPendingPositionRef.current;
+      tooltipElement.style.left = `${nextPosition.x}px`;
+      tooltipElement.style.top = `${nextPosition.y}px`;
+    });
+  }, []);
   const isListPage =
     isEmployeesPage || isOrganizationsPage || isEmployeeRelationsPage || isReportSettingsPage;
   const tableColumns = isEmployeesPage
@@ -2270,6 +2963,13 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
         (row) => String(row?.id ?? row?.employeeId ?? "").trim() === String(selectedEmployeeId).trim()
       ) ?? null
     : null;
+  const selectedOrganizationFromList = isOrganizationsPage
+    ? employees.find(
+        (row) =>
+          String(row?.organUnitId ?? row?.organ_unit_id ?? row?.id ?? "").trim() ===
+          String(selectedOrganizationId).trim()
+      ) ?? null
+    : null;
   const selectedReportFromList = isReportSettingsPage
     ? employees.find(
         (row) =>
@@ -2288,6 +2988,463 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     String(selectedReportTemplateId).trim()
       ? selectedReportSnapshot
       : null);
+  const selectedOrganization = (() => {
+    const organizationId = String(selectedOrganizationId ?? "").trim();
+    const snapshotMatchesId =
+      String(selectedOrganizationSnapshot?.organUnitId ?? selectedOrganizationSnapshot?.organ_unit_id ?? "").trim() ===
+      organizationId;
+    if (selectedOrganizationFromList && snapshotMatchesId) {
+      return {
+        ...selectedOrganizationFromList,
+        ...selectedOrganizationSnapshot
+      };
+    }
+    if (selectedOrganizationFromList) {
+      return selectedOrganizationFromList;
+    }
+    return snapshotMatchesId ? selectedOrganizationSnapshot : null;
+  })();
+  const isSelectedOrganizationResident = useMemo(() => {
+    const rawResident = selectedOrganization?.signResident ?? selectedOrganization?.sign_resident;
+    if (typeof rawResident === "boolean") {
+      return rawResident;
+    }
+    const normalizedResident = String(rawResident ?? "")
+      .trim()
+      .toUpperCase();
+    if (normalizedResident === "НЕТ" || normalizedResident === "FALSE" || normalizedResident === "0") {
+      return false;
+    }
+    if (normalizedResident === "ДА" || normalizedResident === "TRUE" || normalizedResident === "1") {
+      return true;
+    }
+    return true;
+  }, [selectedOrganization?.signResident, selectedOrganization?.sign_resident]);
+  const isSelectedOrganizationResidentForAutoRefresh = useMemo(() => {
+    const rawResident = selectedOrganization?.signResident ?? selectedOrganization?.sign_resident;
+    if (typeof rawResident === "boolean") {
+      return rawResident;
+    }
+    const normalizedResident = String(rawResident ?? "")
+      .trim()
+      .toUpperCase();
+    return normalizedResident === "ДА" || normalizedResident === "TRUE" || normalizedResident === "1";
+  }, [selectedOrganization?.signResident, selectedOrganization?.sign_resident]);
+  const selectedOrganizationDataInfo = useMemo(() => {
+    const rawDataInfo = selectedOrganization?.dataInfo ?? selectedOrganization?.data_info;
+    if (!rawDataInfo) {
+      return {};
+    }
+    if (typeof rawDataInfo === "string") {
+      try {
+        const parsed = JSON.parse(rawDataInfo);
+        return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+      } catch {
+        return {};
+      }
+    }
+    if (typeof rawDataInfo === "object" && !Array.isArray(rawDataInfo)) {
+      return rawDataInfo;
+    }
+    return {};
+  }, [selectedOrganization?.dataInfo, selectedOrganization?.data_info]);
+  const toSnakeCaseDadataKey = useCallback((key) => {
+    return String(key ?? "")
+      .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+      .toLowerCase();
+  }, []);
+  const areDadataValuesEqual = useCallback((left, right) => {
+    if (left === right) {
+      return true;
+    }
+    try {
+      return JSON.stringify(left) === JSON.stringify(right);
+    } catch {
+      return false;
+    }
+  }, []);
+  const normalizeDadataDisplayValue = useCallback(
+    (value) => {
+      if (Array.isArray(value)) {
+        return value.map((item) => normalizeDadataDisplayValue(item));
+      }
+      if (!value || typeof value !== "object") {
+        return value;
+      }
+      const out = {};
+      Object.entries(value).forEach(([rawKey, rawValue]) => {
+        out[rawKey] = normalizeDadataDisplayValue(rawValue);
+      });
+      Object.keys(out).forEach((rawKey) => {
+        const key = String(rawKey ?? "");
+        const snakeKey = toSnakeCaseDadataKey(key);
+        const looksCamelCase = key !== snakeKey && !key.includes("_");
+        if (!looksCamelCase) {
+          return;
+        }
+        if (!Object.prototype.hasOwnProperty.call(out, snakeKey)) {
+          return;
+        }
+        if (areDadataValuesEqual(out[key], out[snakeKey])) {
+          delete out[key];
+        }
+      });
+      return out;
+    },
+    [areDadataValuesEqual, toSnakeCaseDadataKey]
+  );
+  const selectedOrganizationDataInfoForDisplay = useMemo(() => {
+    return normalizeDadataDisplayValue(selectedOrganizationDataInfo);
+  }, [normalizeDadataDisplayValue, selectedOrganizationDataInfo]);
+  const getDadataValueByPath = useCallback((source, path) => {
+    if (!source || typeof source !== "object") {
+      return null;
+    }
+    const parts = String(path ?? "")
+      .split(".")
+      .map((part) => String(part).trim())
+      .filter(Boolean);
+    let cursor = source;
+    for (const part of parts) {
+      if (!cursor || typeof cursor !== "object" || Array.isArray(cursor)) {
+        return null;
+      }
+      cursor = cursor[part];
+    }
+    return cursor;
+  }, []);
+  const normalizeComparisonValue = useCallback((value) => String(value ?? "").trim(), []);
+  const organizationMainIndicatorsMismatch = useMemo(() => {
+    const cardInn = normalizeComparisonValue(selectedOrganization?.inn);
+    const cardKpp = normalizeComparisonValue(selectedOrganization?.kpp);
+    const cardOgrn = normalizeComparisonValue(selectedOrganization?.ogrn);
+    const dadataInn = normalizeComparisonValue(
+      getDadataValueByPath(selectedOrganizationDataInfoForDisplay, "data.inn")
+    );
+    const dadataKpp = normalizeComparisonValue(
+      getDadataValueByPath(selectedOrganizationDataInfoForDisplay, "data.kpp")
+    );
+    const dadataOgrn = normalizeComparisonValue(
+      getDadataValueByPath(selectedOrganizationDataInfoForDisplay, "data.ogrn")
+    );
+    return {
+      inn: Boolean(cardInn && dadataInn && cardInn !== dadataInn),
+      kpp: Boolean(cardKpp && dadataKpp && cardKpp !== dadataKpp),
+      ogrn: Boolean(cardOgrn && dadataOgrn && cardOgrn !== dadataOgrn)
+    };
+  }, [
+    getDadataValueByPath,
+    normalizeComparisonValue,
+    selectedOrganization?.inn,
+    selectedOrganization?.kpp,
+    selectedOrganization?.ogrn,
+    selectedOrganizationDataInfoForDisplay
+  ]);
+  const dadataMismatchByPath = useMemo(
+    () => ({
+      "data.inn": organizationMainIndicatorsMismatch.inn,
+      "data.kpp": organizationMainIndicatorsMismatch.kpp,
+      "data.ogrn": organizationMainIndicatorsMismatch.ogrn
+    }),
+    [
+      organizationMainIndicatorsMismatch.inn,
+      organizationMainIndicatorsMismatch.kpp,
+      organizationMainIndicatorsMismatch.ogrn
+    ]
+  );
+  const getDadataDescription = useCallback((fieldPath, fieldValue) => {
+    const normalizedPath = String(fieldPath ?? "").trim();
+    if (!normalizedPath) {
+      return "";
+    }
+    if (normalizedPath === "data.management.name") {
+      const normalizedValue = String(fieldValue ?? "")
+        .trim()
+        .toUpperCase();
+      const looksLikeLegalEntity =
+        normalizedValue.includes("ОБЩЕСТВО") ||
+        normalizedValue.includes("ООО") ||
+        normalizedValue.includes("АО") ||
+        normalizedValue.includes("ПАО") ||
+        normalizedValue.includes("ЗАО") ||
+        normalizedValue.includes("ОАО");
+      if (looksLikeLegalEntity) {
+        return "Управляющая организация";
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(DADATA_FIELD_DESCRIPTIONS, normalizedPath)) {
+      return DADATA_FIELD_DESCRIPTIONS[normalizedPath];
+    }
+    const normalizedWithoutArray = normalizedPath.replace(/\[\]/g, "");
+    if (Object.prototype.hasOwnProperty.call(DADATA_FIELD_DESCRIPTIONS, normalizedWithoutArray)) {
+      return DADATA_FIELD_DESCRIPTIONS[normalizedWithoutArray];
+    }
+    return normalizedPath;
+  }, []);
+  const formatDadataValue = useCallback((value) => {
+    if (value === null || value === undefined) {
+      return "-";
+    }
+    if (typeof value === "string") {
+      return value;
+    }
+    if (typeof value === "number" || typeof value === "boolean") {
+      return String(value);
+    }
+    return JSON.stringify(value);
+  }, []);
+  const getDadataDisplayValueByKey = useCallback(
+    (key, rawValue) => {
+      const normalizedKey = String(key ?? "").trim().toLowerCase();
+      const normalizedValue = String(rawValue ?? "").trim().toUpperCase();
+      if (normalizedKey === "data.state.status") {
+        return (
+          DADATA_ORGANIZATION_STATUS_DESCRIPTIONS[normalizedValue] ??
+          formatDadataValue(rawValue)
+        );
+      }
+      if (normalizedKey === "data.branch_type" || normalizedKey === "data.branchtype") {
+        return DADATA_BRANCH_TYPE_DESCRIPTIONS[normalizedValue] ?? formatDadataValue(rawValue);
+      }
+      if (normalizedKey === "data.type") {
+        return DADATA_ORGANIZATION_TYPE_DESCRIPTIONS[normalizedValue] ?? formatDadataValue(rawValue);
+      }
+      const isDateField =
+        normalizedKey.endsWith("_date") ||
+        normalizedKey.includes(".date") ||
+        normalizedKey.includes("_date.");
+      if (isDateField && (typeof rawValue === "number" || typeof rawValue === "string")) {
+        const rawText = String(rawValue).trim();
+        if (/^-?\d+$/.test(rawText)) {
+          let timestamp = Number(rawText);
+          if (Number.isFinite(timestamp)) {
+            if (Math.abs(timestamp) < 100_000_000_000) {
+              timestamp *= 1000;
+            }
+            const date = new Date(timestamp);
+            if (!Number.isNaN(date.getTime())) {
+              const hasTime =
+                date.getUTCHours() !== 0 || date.getUTCMinutes() !== 0 || date.getUTCSeconds() !== 0;
+              const datePart = new Intl.DateTimeFormat("ru-RU", {
+                timeZone: "UTC",
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric"
+              }).format(date);
+              if (!hasTime) {
+                return datePart;
+              }
+              const timePart = new Intl.DateTimeFormat("ru-RU", {
+                timeZone: "UTC",
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit",
+                hour12: false
+              }).format(date);
+              return `${datePart} ${timePart}`;
+            }
+          }
+        }
+      }
+      return formatDadataValue(rawValue);
+    },
+    [formatDadataValue]
+  );
+  const flattenDadataKeyValuePairs = useCallback((source, prefix = "") => {
+    if (Array.isArray(source)) {
+      if (!prefix) {
+        return [];
+      }
+      return [
+        {
+          key: prefix,
+          rawValue: source,
+          value: getDadataDisplayValueByKey(prefix, source)
+        }
+      ];
+    }
+    if (source && typeof source === "object") {
+      return Object.entries(source).flatMap(([key, value]) => {
+        const fullKey = prefix ? `${prefix}.${key}` : key;
+        if (Array.isArray(value)) {
+          return [
+            {
+              key: fullKey,
+              rawValue: value,
+              value: getDadataDisplayValueByKey(fullKey, value)
+            }
+          ];
+        }
+        if (value && typeof value === "object") {
+          return flattenDadataKeyValuePairs(value, fullKey);
+        }
+        return [
+          {
+            key: fullKey,
+            rawValue: value,
+            value: getDadataDisplayValueByKey(fullKey, value)
+          }
+        ];
+      });
+    }
+    if (!prefix) {
+      return [];
+    }
+    return [
+      {
+        key: prefix,
+        rawValue: source,
+        value: getDadataDisplayValueByKey(prefix, source)
+      }
+    ];
+  }, [getDadataDisplayValueByKey]);
+  const selectedOrganizationDataInfoRootRows = useMemo(() => {
+    return flattenDadataKeyValuePairs(selectedOrganizationDataInfoForDisplay)
+      .map((item) => ({
+        ...item,
+        orderKey: normalizeDadataOrderKey(item.key),
+        label: getDadataDescription(item.key, item.rawValue),
+        isMismatch: Boolean(dadataMismatchByPath[item.key])
+      }))
+      .sort((left, right) => left.key.localeCompare(right.key, "ru"));
+  }, [
+    dadataMismatchByPath,
+    flattenDadataKeyValuePairs,
+    getDadataDescription,
+    selectedOrganizationDataInfoForDisplay
+  ]);
+  const isAddressDadataKey = useCallback((key) => {
+    const normalized = String(key ?? "").trim();
+    return normalized === "data.address" || normalized.startsWith("data.address.");
+  }, []);
+  const isDadataAttributeVisible = useCallback(
+    (key) => !Boolean(dadataHiddenAttributes[String(key ?? "").trim()]),
+    [dadataHiddenAttributes]
+  );
+  const shouldShowDadataAttribute = useCallback(
+    (key) => !isDadataVisibleOnlyEnabled || isDadataAttributeVisible(key),
+    [isDadataAttributeVisible, isDadataVisibleOnlyEnabled]
+  );
+  const selectedOrganizationCompanyInfoRows = useMemo(() => {
+    const companyOrder = Array.isArray(dadataAttributeOrderMap?.company)
+      ? dadataAttributeOrderMap.company
+      : [];
+    const companyOrderIndexMap = new Map(
+      companyOrder.map((key, index) => [normalizeDadataOrderKey(key), index])
+    );
+    const rows = selectedOrganizationDataInfoRootRows.filter(
+      (row) => !isAddressDadataKey(row.key) && shouldShowDadataAttribute(row.key)
+    );
+    return rows.sort((left, right) => {
+      const leftOrderIndex = companyOrderIndexMap.get(normalizeDadataOrderKey(left?.orderKey ?? left?.key));
+      const rightOrderIndex = companyOrderIndexMap.get(
+        normalizeDadataOrderKey(right?.orderKey ?? right?.key)
+      );
+      const hasLeftOrder = Number.isInteger(leftOrderIndex);
+      const hasRightOrder = Number.isInteger(rightOrderIndex);
+      if (hasLeftOrder && hasRightOrder && leftOrderIndex !== rightOrderIndex) {
+        return leftOrderIndex - rightOrderIndex;
+      }
+      if (hasLeftOrder !== hasRightOrder) {
+        return hasLeftOrder ? -1 : 1;
+      }
+      return String(left?.orderKey ?? left?.key ?? "").localeCompare(
+        String(right?.orderKey ?? right?.key ?? ""),
+        "ru"
+      );
+    });
+  }, [
+    dadataAttributeOrderMap?.company,
+    isAddressDadataKey,
+    selectedOrganizationDataInfoRootRows,
+    shouldShowDadataAttribute
+  ]);
+  const selectedOrganizationAddressInfoRows = useMemo(() => {
+    const addressOrder = Array.isArray(dadataAttributeOrderMap?.address)
+      ? dadataAttributeOrderMap.address
+      : [];
+    const addressOrderIndexMap = new Map(
+      addressOrder.map((key, index) => [normalizeDadataOrderKey(key), index])
+    );
+    const rows = selectedOrganizationDataInfoRootRows.filter(
+      (row) => isAddressDadataKey(row.key) && shouldShowDadataAttribute(row.key)
+    );
+    return rows.sort((left, right) => {
+      const leftOrderIndex = addressOrderIndexMap.get(normalizeDadataOrderKey(left?.orderKey ?? left?.key));
+      const rightOrderIndex = addressOrderIndexMap.get(
+        normalizeDadataOrderKey(right?.orderKey ?? right?.key)
+      );
+      const hasLeftOrder = Number.isInteger(leftOrderIndex);
+      const hasRightOrder = Number.isInteger(rightOrderIndex);
+      if (hasLeftOrder && hasRightOrder && leftOrderIndex !== rightOrderIndex) {
+        return leftOrderIndex - rightOrderIndex;
+      }
+      if (hasLeftOrder !== hasRightOrder) {
+        return hasLeftOrder ? -1 : 1;
+      }
+      return String(left?.orderKey ?? left?.key ?? "").localeCompare(
+        String(right?.orderKey ?? right?.key ?? ""),
+        "ru"
+      );
+    });
+  }, [
+    dadataAttributeOrderMap?.address,
+    isAddressDadataKey,
+    selectedOrganizationDataInfoRootRows,
+    shouldShowDadataAttribute
+  ]);
+  const selectedOrganizationTypeNamesForEdit = useMemo(() => {
+    const selectedIds = new Set(
+      (Array.isArray(organizationCardEditForm.organUnitTypeIds)
+        ? organizationCardEditForm.organUnitTypeIds
+        : []
+      )
+        .map((item) => String(item ?? "").trim())
+        .filter(Boolean)
+    );
+    return organizationUnitTypeCatalog
+      .filter((item) => selectedIds.has(String(item.id ?? "").trim()))
+      .map((item) => item.name);
+  }, [organizationCardEditForm.organUnitTypeIds, organizationUnitTypeCatalog]);
+  const selectedOrganizationTypeSummaryForEdit = useMemo(() => {
+    if (selectedOrganizationTypeNamesForEdit.length === 0) {
+      return "";
+    }
+    if (selectedOrganizationTypeNamesForEdit.length === 1) {
+      return selectedOrganizationTypeNamesForEdit[0];
+    }
+    return `Выбрано: ${selectedOrganizationTypeNamesForEdit.length}`;
+  }, [selectedOrganizationTypeNamesForEdit]);
+  const selectedCountryNameForEdit = useMemo(() => {
+    const selectedId = String(organizationCardEditForm.countryId ?? "").trim();
+    if (!selectedId) {
+      return "";
+    }
+    const item = countryOptions.find((country) => String(country.id ?? "").trim() === selectedId);
+    return item?.name ?? "";
+  }, [countryOptions, organizationCardEditForm.countryId]);
+  const filteredOrganizationTypeCatalogForEdit = useMemo(() => {
+    const token = String(organizationTypeEditFilter ?? "").trim().toLowerCase();
+    if (!token) {
+      return organizationUnitTypeCatalog;
+    }
+    return organizationUnitTypeCatalog.filter((item) =>
+      String(item?.name ?? "")
+        .toLowerCase()
+        .includes(token)
+    );
+  }, [organizationTypeEditFilter, organizationUnitTypeCatalog]);
+  const filteredCountryOptionsForEdit = useMemo(() => {
+    const token = String(countryEditFilter ?? "").trim().toLowerCase();
+    if (!token) {
+      return countryOptions;
+    }
+    return countryOptions.filter((item) =>
+      String(item?.name ?? "")
+        .toLowerCase()
+        .includes(token)
+    );
+  }, [countryEditFilter, countryOptions]);
   const isReportMainSettingsEditable = isCreatingReportCard || isReportMainSettingsEditMode;
   useEffect(() => {
     if (!selectedReport) {
@@ -2324,6 +3481,19 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
         })
       );
   }, [selectedReport]);
+  const selectedReportRecipients = useMemo(() => {
+    const rows = Array.isArray(selectedReport?.recipients) ? selectedReport.recipients : [];
+    return rows
+      .map((item) => ({
+        email: String(item?.email ?? "").trim().toLowerCase()
+      }))
+      .filter((item) => item.email)
+      .sort((left, right) =>
+        String(left.email).localeCompare(String(right.email), "ru-RU", {
+          sensitivity: "base"
+        })
+      );
+  }, [selectedReport]);
   useEffect(() => {
     if (isCreatingReportCard) {
       return;
@@ -2336,10 +3506,15 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     setIsReportOrganizationAddMode(false);
     setIsReportOrganizationComboOpen(false);
     setIsReportAccessGroupAddMode(false);
+    setIsReportRecipientAddMode(false);
     setReportOrganizationSearch("");
     setReportOrganizationOptions([]);
     setSelectedReportOrganizationIdForAdd("");
     setNewReportAccessGroupCode(REPORT_ACCESS_GROUP_ENUM[0]);
+    setNewReportRecipientEmail("");
+    setDeletingReportOrganizationId("");
+    setDeletingReportAccessGroupCode("");
+    setDeletingReportRecipientEmail("");
   }, [isCreatingReportCard, selectedReportTemplateId]);
   useEffect(() => {
     setHasReportTemplateContentLoaded(false);
@@ -2359,6 +3534,26 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
       document.removeEventListener("mousedown", handleMouseDown);
     };
   }, [isReportOrganizationComboOpen]);
+  useEffect(() => {
+    if (!isOrganizationTypeFilterOpen) {
+      return;
+    }
+    const handleMouseDown = (event) => {
+      if (event.target instanceof Element && event.target.closest(".organization-type-filter-combobox")) {
+        return;
+      }
+      setIsOrganizationTypeFilterOpen(false);
+    };
+    document.addEventListener("mousedown", handleMouseDown);
+    return () => {
+      document.removeEventListener("mousedown", handleMouseDown);
+    };
+  }, [isOrganizationTypeFilterOpen]);
+  useEffect(() => {
+    if (!isOrganizationsPage) {
+      setIsOrganizationTypeFilterOpen(false);
+    }
+  }, [isOrganizationsPage]);
   const selectedEmployeeIdForRelations = String(
     selectedEmployee?.id ?? selectedEmployee?.employeeId ?? ""
   ).trim();
@@ -2378,13 +3573,18 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
   const isRelationFormActive = isAddingEmployeeRelation || isEditingEmployeeRelation;
   const isEditingEmployeePosition = Boolean(editingEmployeePositionId);
   const isPositionFormActive = isAddingEmployeePosition || isEditingEmployeePosition;
-  const isEmployeeCardVisible =
-    isEmployeesPage && isEmployeeCardPanelOpen && (Boolean(selectedEmployee) || isCreatingEmployeeCard);
+  const isEmployeeCardVisible = isEmployeesPage && isEmployeeCardPanelOpen;
+  const isOrganizationCardVisible =
+    isOrganizationsPage && isOrganizationCardPanelOpen && Boolean(String(selectedOrganizationId ?? "").trim());
   const isReportCardVisible =
     isReportSettingsPage &&
     isReportCardPanelOpen &&
     (isCreatingReportCard || Boolean(String(selectedReport?.reportTemplateId ?? "").trim()));
-  const isSideCardVisible = isEmployeeCardVisible || isReportCardVisible;
+  const isSideCardVisible = isEmployeeCardVisible || isOrganizationCardVisible || isReportCardVisible;
+  const isEmployeeOrganizationHeaderContext =
+    isEmployeeOrganizationPage || isEmployeeCardPanelOpen || isOrganizationCardPanelOpen;
+  const isReportHeaderContext = isReportSettingsPage || isReportCardPanelOpen;
+  const isEmployeesHeaderContext = isEmployeesPage || isEmployeeCardPanelOpen;
   const reportSqlText = String(selectedReport?.sqlQuery ?? selectedReport?.sql_query ?? "").trim();
   const hasReportSqlForPreview = reportSqlText.length > 0;
   const hasJsonbWithVisibleFieldsForPreview = useMemo(() => {
@@ -2590,7 +3790,7 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
       )
         .trim()
         .toUpperCase();
-      const roleNames = method === "HAND" ? getAuthRoleNamesFromJwt() : [];
+      const roleNames = getAuthRoleNamesFromJwt();
       if (method === "HAND" && roleNames.length === 0) {
         console.warn("JWT roleNames not found for HAND report execution");
         if (requireRoleNamesForHand) {
@@ -2744,7 +3944,14 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
       }
       element.removeAttribute("title");
     });
-  });
+  }, [
+    activePage,
+    activeEmployeeCardTab,
+    activeReportCardTab,
+    isReportCardVisible,
+    isEmployeeCardVisible,
+    reportTemplateViewMode
+  ]);
 
   useEffect(() => {
     const getTooltipTarget = (target) =>
@@ -2759,6 +3966,7 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
       if (!tooltipText) {
         return;
       }
+      scheduleButtonTooltipPositionUpdate(event.clientX, event.clientY);
       setButtonTooltip({
         visible: true,
         text: tooltipText,
@@ -2768,15 +3976,10 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     };
 
     const handleMouseMove = (event) => {
-      setButtonTooltip((prev) =>
-        prev.visible
-          ? {
-              ...prev,
-              x: event.clientX + 12,
-              y: event.clientY + 12
-            }
-          : prev
-      );
+      if (!buttonTooltipVisibleRef.current) {
+        return;
+      }
+      scheduleButtonTooltipPositionUpdate(event.clientX, event.clientY);
     };
 
     const handleMouseOut = (event) => {
@@ -2811,8 +4014,16 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
       document.removeEventListener("scroll", forceHideTooltips, true);
       window.removeEventListener("blur", forceHideTooltips);
       document.removeEventListener("visibilitychange", forceHideTooltips);
+      if (buttonTooltipMoveRafRef.current) {
+        cancelAnimationFrame(buttonTooltipMoveRafRef.current);
+      }
+      buttonTooltipMoveRafRef.current = 0;
     };
-  }, []);
+  }, [scheduleButtonTooltipPositionUpdate]);
+
+  useEffect(() => {
+    buttonTooltipVisibleRef.current = Boolean(buttonTooltip.visible);
+  }, [buttonTooltip.visible]);
 
   useEffect(() => {
     const normalizedEmployeeSettings = normalizeColumnSettingsForColumns(
@@ -2921,6 +4132,69 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
   }, [reportTemplateGeneralParameterColumnWidth]);
 
   useEffect(() => {
+    const reportTemplateId = String(selectedReportTemplateId ?? "").trim();
+    if (!reportTemplateId) {
+      setIsReportTemplateLevelTwoExpanded(false);
+      setIsReportTemplateLevelThreeExpanded(false);
+      return;
+    }
+    const storedMap = parseStoredReportTemplateLevelExpandedMap();
+    const storedState =
+      storedMap && typeof storedMap === "object" ? storedMap[reportTemplateId] : null;
+    const levelTwo =
+      storedState && typeof storedState === "object"
+        ? toBooleanOrDefault(storedState.levelTwoExpanded, false)
+        : false;
+    const levelThree =
+      storedState && typeof storedState === "object"
+        ? toBooleanOrDefault(storedState.levelThreeExpanded, false)
+        : false;
+    setIsReportTemplateLevelTwoExpanded(levelTwo);
+    setIsReportTemplateLevelThreeExpanded(levelThree);
+  }, [selectedReportTemplateId]);
+
+
+  useEffect(() => {
+    const reportTemplateId = String(selectedReportTemplateId ?? "").trim();
+    if (!reportTemplateId) {
+      return;
+    }
+    const storedMap = parseStoredReportTemplateLevelExpandedMap();
+    const nextMap = {
+      ...storedMap,
+      [reportTemplateId]: {
+        levelTwoExpanded: isReportTemplateLevelTwoExpanded,
+        levelThreeExpanded: isReportTemplateLevelThreeExpanded
+      }
+    };
+    window.localStorage.setItem(
+      REPORT_TEMPLATE_LEVEL_EXPANDED_STORAGE_KEY,
+      JSON.stringify(nextMap)
+    );
+  }, [isReportTemplateLevelThreeExpanded, isReportTemplateLevelTwoExpanded, selectedReportTemplateId]);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      DADATA_HIDDEN_ATTRIBUTES_STORAGE_KEY,
+      JSON.stringify(dadataHiddenAttributes)
+    );
+  }, [dadataHiddenAttributes]);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      DADATA_VISIBLE_ONLY_STORAGE_KEY,
+      String(isDadataVisibleOnlyEnabled)
+    );
+  }, [isDadataVisibleOnlyEnabled]);
+  useEffect(() => {
+    window.localStorage.setItem(
+      DADATA_ATTRIBUTE_ORDER_STORAGE_KEY,
+      JSON.stringify(dadataAttributeOrderMap)
+    );
+  }, [dadataAttributeOrderMap]);
+
+
+  useEffect(() => {
     window.localStorage.setItem(
       REPORT_TEMPLATE_GENERAL_SORT_DIRECTION_STORAGE_KEY,
       reportTemplateGeneralSettingsSortDirection
@@ -3003,6 +4277,22 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     setIsCreatingEmployeeCard(false);
     setIsEmployeeCardEditMode(false);
   }, [linkedEmployeeIdFilter]);
+  useEffect(() => {
+    if (!linkedOrganizationIdFilter) {
+      return;
+    }
+    setSelectedOrganizationId("");
+    setSelectedOrganizationSnapshot(null);
+    setSelectedRowIndex(-1);
+    setIsOrganizationCardPanelOpen(false);
+    setActiveOrganizationCardTab(ORGANIZATION_CARD_TABS.MAIN);
+    setIsOrganizationCardEditMode(false);
+    setOrganizationCardEditForm(INITIAL_ORGANIZATION_CARD_EDIT_FORM);
+    setActiveOrganizationEditCombo(null);
+    setOrganizationTypeEditFilter("");
+    setCountryEditFilter("");
+    setOrganizationEditComboMenuLayouts({});
+  }, [linkedOrganizationIdFilter, ORGANIZATION_CARD_TABS.MAIN]);
 
   useEffect(() => {
     if (!isEmployeesPage || !linkedEmployeeIdFilter || !isLinkedEmployeeLookupActive) {
@@ -3026,6 +4316,28 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     isLinkedEmployeeLookupActive,
     linkedEmployeeIdFilter
   ]);
+  useEffect(() => {
+    if (!isOrganizationsPage || !linkedOrganizationIdFilter || !isLinkedOrganizationLookupActive) {
+      return;
+    }
+
+    if (hasAnyEmployeeListFilter(filters)) {
+      setFilters({ ...ORGANIZATION_INITIAL_FILTERS });
+    }
+    if (hasAnyEmployeeListFilter(debouncedOrganizationFilters)) {
+      setDebouncedOrganizationFilters({ ...ORGANIZATION_INITIAL_FILTERS });
+    }
+    if (currentPage !== 1) {
+      setCurrentPage(1);
+    }
+  }, [
+    currentPage,
+    debouncedOrganizationFilters,
+    filters,
+    isOrganizationsPage,
+    isLinkedOrganizationLookupActive,
+    linkedOrganizationIdFilter
+  ]);
 
   useEffect(() => {
     if (!isEmployeesPage || !linkedEmployeeIdFilter || !isLinkedEmployeeLookupActive) {
@@ -3045,9 +4357,50 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     linkedEmployeeIdFilter,
     selectedEmployee
   ]);
+  useEffect(() => {
+    if (!isOrganizationsPage || !linkedOrganizationIdFilter || !isLinkedOrganizationLookupActive) {
+      return;
+    }
+    const currentSelectedId = String(
+      selectedOrganization?.organUnitId ?? selectedOrganization?.organ_unit_id ?? ""
+    ).trim();
+    if (currentSelectedId === linkedOrganizationIdFilter) {
+      return;
+    }
+    setSelectedOrganizationId("");
+    setSelectedOrganizationSnapshot(null);
+    setSelectedRowIndex(-1);
+    setIsOrganizationCardPanelOpen(false);
+    setActiveOrganizationCardTab(ORGANIZATION_CARD_TABS.MAIN);
+    setIsOrganizationCardEditMode(false);
+    setOrganizationCardEditForm(INITIAL_ORGANIZATION_CARD_EDIT_FORM);
+    setActiveOrganizationEditCombo(null);
+    setOrganizationTypeEditFilter("");
+    setCountryEditFilter("");
+    setOrganizationEditComboMenuLayouts({});
+  }, [
+    isOrganizationsPage,
+    isLinkedOrganizationLookupActive,
+    linkedOrganizationIdFilter,
+    selectedOrganization,
+    ORGANIZATION_CARD_TABS.MAIN
+  ]);
+  useEffect(() => {
+    if (isOrganizationCardPanelOpen) {
+      return;
+    }
+    setIsOrganizationCardEditMode(false);
+    setOrganizationCardEditForm(INITIAL_ORGANIZATION_CARD_EDIT_FORM);
+    setActiveOrganizationEditCombo(null);
+    setOrganizationTypeEditFilter("");
+    setCountryEditFilter("");
+    setOrganizationEditComboMenuLayouts({});
+  }, [isOrganizationCardPanelOpen]);
 
   useEffect(() => {
-    setPageJumpInput(String(currentPage));
+    if (pageJumpInputRef.current) {
+      pageJumpInputRef.current.value = String(currentPage);
+    }
   }, [currentPage]);
 
   useEffect(() => {
@@ -3069,11 +4422,15 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
   useEffect(() => {
     if (employees.length === 0) {
       setSelectedEmployeeId("");
+      setSelectedOrganizationId("");
       setSelectedReportTemplateId("");
       reportTemplateSettingsLoadedForIdRef.current = "";
       setSelectedRowIndex(-1);
       if (!selectedEmployeeId) {
         setIsEmployeeCardPanelOpen(false);
+      }
+      if (!selectedOrganizationId) {
+        setIsOrganizationCardPanelOpen(false);
       }
       if (!selectedReportTemplateId) {
         setIsReportCardPanelOpen(false);
@@ -3084,7 +4441,7 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     if (selectedRowIndex >= employees.length) {
       setSelectedRowIndex(-1);
     }
-  }, [employees, selectedEmployeeId, selectedReportTemplateId, selectedRowIndex]);
+  }, [employees, selectedEmployeeId, selectedOrganizationId, selectedReportTemplateId, selectedRowIndex]);
 
   useEffect(() => {
     if (!selectedEmployeeFromList) {
@@ -3092,6 +4449,34 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     }
     setSelectedEmployeeSnapshot(selectedEmployeeFromList);
   }, [selectedEmployeeFromList]);
+  useEffect(() => {
+    if (!selectedOrganizationFromList) {
+      return;
+    }
+    setSelectedOrganizationSnapshot((previous) => {
+      const previousId = String(previous?.organUnitId ?? previous?.organ_unit_id ?? "").trim();
+      const nextId = String(
+        selectedOrganizationFromList?.organUnitId ??
+          selectedOrganizationFromList?.organ_unit_id ??
+          selectedOrganizationFromList?.id ??
+          ""
+      ).trim();
+      if (previous && previousId && nextId && previousId === nextId) {
+        return {
+          ...selectedOrganizationFromList,
+          ...previous
+        };
+      }
+      return selectedOrganizationFromList;
+    });
+  }, [selectedOrganizationFromList]);
+
+  useEffect(() => {
+    if (isOrganizationsPage) {
+      return;
+    }
+    selectedOrganizationRowRef.current = null;
+  }, [isOrganizationsPage]);
 
   useEffect(() => {
     if (!selectedReportFromList) {
@@ -3752,7 +5137,12 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
         setIsReportPreviewLoading(false);
       }
     };
-    void run();
+    const timeoutId = window.setTimeout(() => {
+      void run();
+    }, 0);
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
   }, [
     activeReportCardTab,
     isReportCardVisible,
@@ -3766,7 +5156,6 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     reportPreviewError,
     selectedReportTemplateId
   ]);
-
   useEffect(() => {
     if (
       !isReportCardVisible ||
@@ -3788,10 +5177,15 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
       return;
     }
     lastAutoValidatedReportSqlRef.current = signature;
-    void checkReportSqlSyntax(normalizedSql, {
-      showSuccessToast: false,
-      showErrorToast: false
-    });
+    const timeoutId = window.setTimeout(() => {
+      void checkReportSqlSyntax(normalizedSql, {
+        showSuccessToast: false,
+        showErrorToast: false
+      });
+    }, 120);
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
   }, [
     activeReportCardTab,
     isReportCardVisible,
@@ -3917,7 +5311,7 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     };
   }, [isColumnSettingsOpen]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!isAdministrationOpen) {
       return;
     }
@@ -3981,6 +5375,8 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
         const requestFilters =
           isEmployeesPage && linkedEmployeeIdFilter
             ? INITIAL_FILTERS
+            : isOrganizationsPage && linkedOrganizationIdFilter
+              ? ORGANIZATION_INITIAL_FILTERS
             : activeFiltersForRequest;
         const response = await fetch(activeApiUrl, {
           method: "POST",
@@ -3992,6 +5388,8 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
               ...getListRequestPayload(pageSize, currentPage, requestFilters),
               ...(isEmployeesPage && linkedEmployeeIdFilter
                 ? { employeeId: linkedEmployeeIdFilter }
+                : isOrganizationsPage && linkedOrganizationIdFilter
+                  ? { organUnitId: linkedOrganizationIdFilter }
                 : {})
             })
           )
@@ -4031,6 +5429,9 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
         if (isEmployeesPage && linkedEmployeeIdFilter && isLinkedEmployeeLookupActive) {
           setHasLinkedEmployeeLookupAttempt(true);
         }
+        if (isOrganizationsPage && linkedOrganizationIdFilter && isLinkedOrganizationLookupActive) {
+          setHasLinkedOrganizationLookupAttempt(true);
+        }
         setEmployeesLoading(false);
       }
     };
@@ -4043,13 +5444,345 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     currentPage,
     employeesListRefreshToken,
     linkedEmployeeIdFilter,
+    linkedOrganizationIdFilter,
     pageSize,
     activeSortRules,
     isEmployeesPage,
+    isOrganizationsPage,
     isEmployeeRelationsPage,
     isReportSettingsPage,
-    isListPage
+    isListPage,
+    isLinkedOrganizationLookupActive
   ]);
+
+  useEffect(() => {
+    if (!isOrganizationsPage) {
+      return;
+    }
+    let cancelled = false;
+    const loadOrganizationUnitTypes = async () => {
+      try {
+        const response = await fetch(LIST_ORGANIZATION_UNIT_TYPES_API_URL);
+        const data = await response.json();
+        if (!response.ok) {
+          if (!cancelled) {
+            setOrganizationUnitTypeOptions([]);
+            setOrganizationUnitTypeCatalog([]);
+          }
+          return;
+        }
+        const items = Array.isArray(data?.items) ? data.items : [];
+        const normalized = items
+          .map((item) => ({
+            id: String(item?.id ?? "").trim(),
+            name: String(item?.name ?? "").trim(),
+            sortOrder: Number(item?.sortOrder ?? item?.sort_order ?? Number.MAX_SAFE_INTEGER)
+          }))
+          .filter((item) => item.id && item.name)
+          .sort((left, right) => {
+            if (left.sortOrder !== right.sortOrder) {
+              return left.sortOrder - right.sortOrder;
+            }
+            return left.name.localeCompare(right.name, "ru-RU", { sensitivity: "base", numeric: true });
+          });
+        if (!cancelled) {
+          setOrganizationUnitTypeCatalog(normalized);
+          setOrganizationUnitTypeOptions(normalized.map((item) => item.name));
+        }
+      } catch {
+        if (!cancelled) {
+          setOrganizationUnitTypeOptions([]);
+          setOrganizationUnitTypeCatalog([]);
+        }
+      }
+    };
+    loadOrganizationUnitTypes();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOrganizationsPage]);
+  useEffect(() => {
+    if (!isOrganizationsPage) {
+      return;
+    }
+    let cancelled = false;
+    const loadCountries = async () => {
+      try {
+        const response = await fetch(LIST_COUNTRIES_API_URL);
+        const data = await response.json();
+        if (!response.ok) {
+          if (!cancelled) {
+            setCountryOptions([]);
+          }
+          return;
+        }
+        const items = Array.isArray(data?.items) ? data.items : [];
+        const normalized = items
+          .map((item) => ({
+            id: String(item?.id ?? "").trim(),
+            name: String(item?.name ?? "").trim()
+          }))
+          .filter((item) => item.id && item.name);
+        if (!cancelled) {
+          setCountryOptions(normalized);
+        }
+      } catch {
+        if (!cancelled) {
+          setCountryOptions([]);
+        }
+      }
+    };
+    loadCountries();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOrganizationsPage]);
+  useEffect(() => {
+    if (!isOrganizationsPage) {
+      return;
+    }
+    if (!Array.isArray(filters.organUnitTypeNames)) {
+      return;
+    }
+    const selected = filters.organUnitTypeNames
+      .map((item) => String(item ?? "").trim())
+      .filter(Boolean);
+    if (selected.length === 0) {
+      return;
+    }
+    const allowed = new Set(organizationUnitTypeOptions);
+    const normalized = selected.filter((name) => allowed.has(name));
+    if (normalized.length === selected.length) {
+      return;
+    }
+    setCurrentPage(1);
+    setFilters((prev) => ({
+      ...prev,
+      organUnitTypeNames: normalized
+    }));
+  }, [filters.organUnitTypeNames, isOrganizationsPage, organizationUnitTypeOptions]);
+  useEffect(() => {
+    if (!isOrganizationsPage || !isOrganizationCardPanelOpen) {
+      return;
+    }
+    if (!isSelectedOrganizationResidentForAutoRefresh) {
+      return;
+    }
+    const organizationId = String(selectedOrganizationId ?? "").trim();
+    if (!organizationId) {
+      return;
+    }
+    let cancelled = false;
+    const loadOrganizationDetails = async () => {
+      try {
+        const response = await fetch(ORGANIZATION_DETAILS_API_PATH(encodeURIComponent(organizationId)));
+        const data = await response.json();
+        if (cancelled || !response.ok) {
+          return;
+        }
+        setSelectedOrganizationSnapshot(data?.item && typeof data.item === "object" ? data.item : null);
+      } catch {
+        // keep snapshot from list when details request fails
+      }
+    };
+    void loadOrganizationDetails();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOrganizationsPage, isOrganizationCardPanelOpen, selectedOrganizationId]);
+
+  useEffect(() => {
+    if (!isPrintFormsPage) {
+      return;
+    }
+    const fetchPrintForms = async () => {
+      setPrintFormsLoading(true);
+      setPrintFormsError("");
+      try {
+        const response = await fetch(PRINT_FORM_TEMPLATES_API_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ limit: 100, offset: 1 })
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          setPrintFormsItems([]);
+          setPrintFormsError(String(data?.error ?? "Не удалось получить шаблоны печатных форм"));
+          return;
+        }
+        const items = Array.isArray(data?.items) ? data.items : [];
+        setPrintFormsItems(items);
+      } catch {
+        setPrintFormsItems([]);
+        setPrintFormsError("Не удалось получить шаблоны печатных форм");
+      } finally {
+        setPrintFormsLoading(false);
+      }
+    };
+    fetchPrintForms();
+  }, [isPrintFormsPage, printFormsRefreshToken]);
+
+  const handlePrintFormPdfSelect = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) {
+      return;
+    }
+    if (!/\.pdf$/i.test(file.name)) {
+      setPrintFormsError("Для шаблона можно загрузить только PDF-файл");
+      return;
+    }
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const value = String(reader.result ?? "");
+          const commaIndex = value.indexOf(",");
+          resolve(commaIndex >= 0 ? value.slice(commaIndex + 1) : value);
+        };
+        reader.onerror = () => reject(new Error("Не удалось прочитать файл"));
+        reader.readAsDataURL(file);
+      });
+      setPrintFormPdfName(file.name);
+      setPrintFormPdfBase64(String(base64));
+      setPrintFormDetectedFields([]);
+      setPrintFormsError("");
+    } catch {
+      setPrintFormsError("Не удалось прочитать PDF-файл");
+    }
+  };
+
+  const handleCreatePrintFormTemplate = async () => {
+    const name = String(printFormName ?? "").trim();
+    const dataSql = String(printFormDataSql ?? "").trim();
+    const templatePdfBase64 = String(printFormPdfBase64 ?? "").trim();
+    if (!name) {
+      setPrintFormsError("Укажи название шаблона");
+      return;
+    }
+    if (!dataSql) {
+      setPrintFormsError("Укажи SQL для получения данных");
+      return;
+    }
+    if (!templatePdfBase64) {
+      setPrintFormsError("Загрузи PDF-шаблон");
+      return;
+    }
+    let fieldMapping;
+    let overlaySettings;
+    try {
+      fieldMapping = JSON.parse(String(printFormFieldMappingText ?? "").trim() || "[]");
+      if (!Array.isArray(fieldMapping)) {
+        setPrintFormsError("Поле fieldMapping должно быть JSON-массивом");
+        return;
+      }
+    } catch {
+      setPrintFormsError("Поле fieldMapping содержит невалидный JSON");
+      return;
+    }
+    try {
+      overlaySettings = JSON.parse(String(printFormOverlaySettingsText ?? "").trim() || "{}");
+      if (!overlaySettings || typeof overlaySettings !== "object" || Array.isArray(overlaySettings)) {
+        setPrintFormsError("Поле overlaySettings должно быть JSON-объектом");
+        return;
+      }
+    } catch {
+      setPrintFormsError("Поле overlaySettings содержит невалидный JSON");
+      return;
+    }
+    setIsPrintFormSaving(true);
+    setPrintFormsError("");
+    try {
+      const response = await fetch(PRINT_FORM_TEMPLATE_CREATE_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(
+          toCamelApiPayload({
+            name,
+            code: String(printFormCode ?? "").trim(),
+            description: String(printFormDescription ?? "").trim(),
+            dataSql,
+            fieldMapping,
+            overlaySettings,
+            templatePdfBase64
+          })
+        )
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setPrintFormsError(String(data?.error ?? "Не удалось создать шаблон печатной формы"));
+        return;
+      }
+      setPrintFormName("");
+      setPrintFormCode("");
+      setPrintFormDescription("");
+      setPrintFormDataSql("select 1 as sample_value");
+      setPrintFormFieldMappingText(`[
+  { "sourceField": "sample_value", "page": 1, "x": 80, "y": 720, "fontSize": 12 }
+]`);
+      setPrintFormOverlaySettingsText(`{
+  "enabled": true,
+  "text": "Черновик",
+  "page": "ALL",
+  "x": 40,
+  "y": 24,
+  "fontSize": 10,
+  "opacity": 0.35,
+  "color": "#6b7280"
+}`);
+      setPrintFormPdfName("");
+      setPrintFormPdfBase64("");
+      setPrintFormDetectedFields([]);
+      setActivePrintFormsTab(PRINT_FORMS_TABS.LIST);
+      setPrintFormsRefreshToken((prev) => prev + 1);
+    } catch {
+      setPrintFormsError("Не удалось создать шаблон печатной формы");
+    } finally {
+      setIsPrintFormSaving(false);
+    }
+  };
+
+  const handleRecognizePrintFormTemplate = async () => {
+    const templatePdfBase64 = String(printFormPdfBase64 ?? "").trim();
+    if (!templatePdfBase64) {
+      setPrintFormsError("Сначала загрузи PDF-шаблон");
+      return;
+    }
+    setIsPrintFormRecognizing(true);
+    setPrintFormsError("");
+    try {
+      const response = await fetch(PRINT_FORM_TEMPLATE_RECOGNIZE_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(
+          toCamelApiPayload({
+            templatePdfBase64
+          })
+        )
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setPrintFormsError(String(data?.error ?? "Не удалось распознать атрибуты в PDF"));
+        return;
+      }
+      const detectedFields = Array.isArray(data?.item?.templateFields)
+        ? data.item.templateFields.map((item) => String(item ?? "").trim()).filter(Boolean)
+        : [];
+      const recognizedFieldMapping = Array.isArray(data?.item?.fieldMapping) ? data.item.fieldMapping : [];
+      setPrintFormDetectedFields(detectedFields);
+      setPrintFormFieldMappingText(JSON.stringify(recognizedFieldMapping, null, 2));
+    } catch {
+      setPrintFormsError("Не удалось распознать атрибуты в PDF");
+    } finally {
+      setIsPrintFormRecognizing(false);
+    }
+  };
 
   useEffect(() => {
     if (!isEmployeesPage || !linkedEmployeeIdFilter || !isLinkedEmployeeLookupActive || employeesLoading) {
@@ -4085,6 +5818,43 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     isLinkedEmployeeLookupActive,
     linkedEmployeeIdFilter
   ]);
+  useEffect(() => {
+    if (!isOrganizationsPage || !linkedOrganizationIdFilter || !isLinkedOrganizationLookupActive || employeesLoading) {
+      return;
+    }
+    const matchedIndex = employees.findIndex(
+      (row) =>
+        String(row?.organUnitId ?? row?.organ_unit_id ?? row?.id ?? "").trim() === linkedOrganizationIdFilter
+    );
+    if (matchedIndex < 0) {
+      if (hasLinkedOrganizationLookupAttempt) {
+        setIsLinkedOrganizationLookupActive(false);
+      }
+      return;
+    }
+    if (!isOrganizationCardPanelOpen) {
+      setActiveOrganizationCardTab(ORGANIZATION_CARD_TABS.MAIN);
+    }
+    setIsOrganizationCardEditMode(false);
+    setOrganizationCardEditForm(INITIAL_ORGANIZATION_CARD_EDIT_FORM);
+    setSelectedOrganizationId(linkedOrganizationIdFilter);
+    setSelectedRowIndex(matchedIndex);
+    organizationDadataAutoRefreshAttemptedRef.current = new Set();
+    setIsOrganizationCardPanelOpen(true);
+    setIsColumnSettingsOpen(false);
+    setLinkedOrganizationIdFilter("");
+    setIsLinkedOrganizationLookupActive(false);
+    setHasLinkedOrganizationLookupAttempt(false);
+  }, [
+    employees,
+    employeesLoading,
+    hasLinkedOrganizationLookupAttempt,
+    isLinkedOrganizationLookupActive,
+    isOrganizationCardPanelOpen,
+    isOrganizationsPage,
+    linkedOrganizationIdFilter,
+    ORGANIZATION_CARD_TABS.MAIN
+  ]);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   const visiblePaginationItems = (() => {
@@ -4109,6 +5879,82 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     }
     return items;
   })();
+  const captureReportSettingsListSnapshot = useCallback(() => {
+    reportSettingsListSnapshotRef.current = {
+      employees,
+      totalCount,
+      currentPage,
+      totalPages,
+      visiblePaginationItems
+    };
+  }, [currentPage, employees, totalCount, totalPages, visiblePaginationItems]);
+  const captureEmployeeListSnapshot = useCallback(() => {
+    employeeListSnapshotRef.current = {
+      employees,
+      totalCount,
+      currentPage,
+      totalPages,
+      visiblePaginationItems
+    };
+  }, [currentPage, employees, totalCount, totalPages, visiblePaginationItems]);
+  const startReportCardListTransition = useCallback(() => {
+    if (!isReportSettingsPage) {
+      return;
+    }
+    captureReportSettingsListSnapshot();
+    if (reportCardTransitionTimeoutRef.current) {
+      window.clearTimeout(reportCardTransitionTimeoutRef.current);
+      reportCardTransitionTimeoutRef.current = 0;
+    }
+    setIsReportCardTransitioning(true);
+    reportCardTransitionTimeoutRef.current = window.setTimeout(() => {
+      setIsReportCardTransitioning(false);
+      reportCardTransitionTimeoutRef.current = 0;
+    }, REPORT_CARD_TRANSITION_MS);
+  }, [captureReportSettingsListSnapshot, isReportSettingsPage]);
+  const startEmployeeCardListTransition = useCallback(() => {
+    if (!isEmployeesPage) {
+      return;
+    }
+    captureEmployeeListSnapshot();
+    if (employeeCardTransitionTimeoutRef.current) {
+      window.clearTimeout(employeeCardTransitionTimeoutRef.current);
+      employeeCardTransitionTimeoutRef.current = 0;
+    }
+    setIsEmployeeCardTransitioning(true);
+    employeeCardTransitionTimeoutRef.current = window.setTimeout(() => {
+      setIsEmployeeCardTransitioning(false);
+      employeeCardTransitionTimeoutRef.current = 0;
+    }, SIDE_CARD_TRANSITION_MS);
+  }, [captureEmployeeListSnapshot, isEmployeesPage]);
+  const employeeListSnapshot = employeeListSnapshotRef.current;
+  const reportSettingsSnapshot = reportSettingsListSnapshotRef.current;
+  const activeListSnapshot =
+    isReportSettingsPage && isReportCardTransitioning && reportSettingsSnapshot
+      ? reportSettingsSnapshot
+      : isEmployeesPage && isEmployeeCardTransitioning && employeeListSnapshot
+        ? employeeListSnapshot
+        : null;
+  const displayedEmployees =
+    activeListSnapshot
+      ? activeListSnapshot.employees
+      : employees;
+  const displayedTotalCount =
+    activeListSnapshot
+      ? activeListSnapshot.totalCount
+      : totalCount;
+  const displayedCurrentPage =
+    activeListSnapshot
+      ? activeListSnapshot.currentPage
+      : currentPage;
+  const displayedTotalPages =
+    activeListSnapshot
+      ? activeListSnapshot.totalPages
+      : totalPages;
+  const displayedVisiblePaginationItems =
+    activeListSnapshot
+      ? activeListSnapshot.visiblePaginationItems
+      : visiblePaginationItems;
   const settingsMap = new Map(columnSettings.map((item, index) => [item.key, { ...item, index }]));
   const orderedColumns = [...tableColumns].sort(
     (a, b) => (settingsMap.get(a.key)?.index ?? 0) - (settingsMap.get(b.key)?.index ?? 0)
@@ -4248,6 +6094,33 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
       ...prev,
       [field]: value
     }));
+  };
+  const selectedOrganizationTypeNames = Array.isArray(filters.organUnitTypeNames)
+    ? filters.organUnitTypeNames
+        .map((item) => String(item ?? "").trim())
+        .filter(Boolean)
+    : [];
+  const organizationTypeFilterTitle =
+    selectedOrganizationTypeNames.length === 0
+      ? "Выбрать тип"
+      : selectedOrganizationTypeNames.length === 1
+        ? selectedOrganizationTypeNames[0]
+        : `Выбрано: ${selectedOrganizationTypeNames.length}`;
+  const toggleOrganizationTypeFilterValue = (name) => {
+    const normalizedName = String(name ?? "").trim();
+    if (!normalizedName) {
+      return;
+    }
+    const selectedSet = new Set(selectedOrganizationTypeNames);
+    if (selectedSet.has(normalizedName)) {
+      selectedSet.delete(normalizedName);
+    } else {
+      selectedSet.add(normalizedName);
+    }
+    handleFilterChange(
+      "organUnitTypeNames",
+      organizationUnitTypeOptions.filter((optionName) => selectedSet.has(optionName))
+    );
   };
 
   const handleResizeStart = (field, event) => {
@@ -4481,7 +6354,19 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
   };
 
   const handleAdministrationClick = () => {
-    setIsAdministrationOpen((prev) => !prev);
+    setIsAdministrationOpen((prev) => {
+      const next = !prev;
+      if (next) {
+        const buttonRect = administrationButtonRef.current?.getBoundingClientRect();
+        if (buttonRect) {
+          setAdministrationPanelPosition({
+            top: Math.max(0, buttonRect.top),
+            left: Math.max(0, buttonRect.right)
+          });
+        }
+      }
+      return next;
+    });
   };
 
   const handleOpenRelationCreateFromList = () => {
@@ -4506,16 +6391,24 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     setEmployees([]);
     setEmployeesError("");
     setSelectedEmployeeSnapshot(null);
+    setSelectedOrganizationSnapshot(null);
     setSelectedReportSnapshot(null);
     setSelectedEmployeeId("");
+    setSelectedOrganizationId("");
     setSelectedReportTemplateId("");
     reportTemplateSettingsLoadedForIdRef.current = "";
     setSelectedRowIndex(-1);
     setIsEmployeeCardPanelOpen(false);
+    setIsEmployeeCardTransitioning(false);
+    setIsOrganizationCardPanelOpen(false);
     setIsReportCardPanelOpen(false);
     setIsCreatingReportCard(false);
     setActiveReportCardTab(REPORT_CARD_TABS.MAIN);
     setIsColumnSettingsOpen(false);
+    if (employeeCardTransitionTimeoutRef.current) {
+      window.clearTimeout(employeeCardTransitionTimeoutRef.current);
+      employeeCardTransitionTimeoutRef.current = 0;
+    }
 
     if (pageId === PAGE_IDS.EMPLOYEES) {
       setSortRules(parseStoredSortRules());
@@ -4572,6 +6465,21 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
       setIsResultModalOpen(false);
       setPendingFile(null);
       setLoading(false);
+    } else if (pageId === PAGE_IDS.PRINT_FORMS) {
+      setSortRules(parseStoredSortRules());
+      setFilters(parseStoredFilters());
+      setDebouncedEmployeeFilters(parseStoredFilters());
+      setDebouncedOrganizationFilters(parseStoredOrganizationFilters());
+      setDebouncedRelationsPageFilters(parseStoredRelationsPageFilters());
+      setDebouncedReportSettingsFilters(parseStoredReportSettingsFilters());
+      setColumnWidths(parseStoredColumnWidths());
+      setColumnSettings(parseStoredColumnSettings());
+      setIsConfirmModalOpen(false);
+      setIsResultModalOpen(false);
+      setPendingFile(null);
+      setLoading(false);
+      setActivePrintFormsTab(PRINT_FORMS_TABS.LIST);
+      setPrintFormsError("");
     }
     setIsAdministrationOpen(false);
     if (pageId !== PAGE_IDS.EMPLOYEES) {
@@ -4580,11 +6488,21 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
       setHasLinkedEmployeeLookupAttempt(false);
       setEmployeeIdToUrl("");
     }
+    if (pageId !== PAGE_IDS.ORGANIZATIONS) {
+      setLinkedOrganizationIdFilter("");
+      setIsLinkedOrganizationLookupActive(false);
+      setHasLinkedOrganizationLookupAttempt(false);
+      setOrganizationIdToUrl("");
+    }
   };
 
   const handleEmployeeRowClick = (rowIndex) => {
     if (isLinkedEmployeeLookupActive) {
       return;
+    }
+    if (employeeCardCloseCleanupTimeoutRef.current) {
+      window.clearTimeout(employeeCardCloseCleanupTimeoutRef.current);
+      employeeCardCloseCleanupTimeoutRef.current = 0;
     }
     const employeeId = String(employees[rowIndex]?.id ?? employees[rowIndex]?.employeeId ?? "").trim();
     setSelectedEmployeeSnapshot(employees[rowIndex] ?? null);
@@ -4599,7 +6517,36 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
       setIsLinkedEmployeeLookupActive(false);
       setHasLinkedEmployeeLookupAttempt(false);
       setEmployeeIdToUrl(employeeId);
+      startEmployeeCardListTransition();
       setIsEmployeeCardPanelOpen(true);
+      setIsColumnSettingsOpen(false);
+    }
+  };
+
+  const handleOrganizationRowClick = (rowIndex) => {
+    if (isLinkedOrganizationLookupActive) {
+      return;
+    }
+    const organizationId = String(
+      employees[rowIndex]?.organUnitId ?? employees[rowIndex]?.organ_unit_id ?? employees[rowIndex]?.id ?? ""
+    ).trim();
+    setSelectedOrganizationSnapshot(employees[rowIndex] ?? null);
+    if (!isOrganizationCardPanelOpen) {
+      setActiveOrganizationCardTab(ORGANIZATION_CARD_TABS.MAIN);
+    }
+    setSelectedOrganizationId(organizationId);
+    setSelectedRowIndex(rowIndex);
+    setIsOrganizationCardEditMode(false);
+    setOrganizationCardEditForm(INITIAL_ORGANIZATION_CARD_EDIT_FORM);
+    setActiveOrganizationEditCombo(null);
+    setOrganizationTypeEditFilter("");
+    setCountryEditFilter("");
+    setOrganizationEditComboMenuLayouts({});
+    if (isOrganizationsPage) {
+      setIsLinkedOrganizationLookupActive(false);
+      setHasLinkedOrganizationLookupAttempt(false);
+      setOrganizationIdToUrl(organizationId);
+      setIsOrganizationCardPanelOpen(true);
       setIsColumnSettingsOpen(false);
     }
   };
@@ -4661,12 +6608,23 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     setIsReportDeleting(false);
     setPendingReportDelete(null);
     setReportMainSettingsDraft(buildReportMainSettingsDraft(row));
+    setIsReportOrganizationAddMode(false);
+    setIsReportOrganizationComboOpen(false);
+    setReportOrganizationSearch("");
+    setReportOrganizationOptions([]);
+    setSelectedReportOrganizationIdForAdd("");
     setIsReportAccessGroupAddMode(false);
     setNewReportAccessGroupCode(REPORT_ACCESS_GROUP_ENUM[0]);
+    setIsReportRecipientAddMode(false);
+    setNewReportRecipientEmail("");
+    setDeletingReportOrganizationId("");
+    setDeletingReportAccessGroupCode("");
+    setDeletingReportRecipientEmail("");
     setSelectedReportSnapshot(row);
     setSelectedReportTemplateId(reportTemplateId);
     reportTemplateSettingsLoadedForIdRef.current = "";
     setSelectedRowIndex(rowIndex);
+    startReportCardListTransition();
     setIsReportCardPanelOpen(true);
     setIsColumnSettingsOpen(false);
   };
@@ -4708,10 +6666,16 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     setSelectedReportOrganizationIdForAdd("");
     setIsReportAccessGroupAddMode(false);
     setNewReportAccessGroupCode(REPORT_ACCESS_GROUP_ENUM[0]);
+    setIsReportRecipientAddMode(false);
+    setNewReportRecipientEmail("");
+    setDeletingReportOrganizationId("");
+    setDeletingReportAccessGroupCode("");
+    setDeletingReportRecipientEmail("");
     setSelectedReportSnapshot({
       reportTemplateId: "",
       organizations: [],
-      accessGroups: []
+      accessGroups: [],
+      recipients: []
     });
     setSelectedReportTemplateId("");
     reportTemplateSettingsLoadedForIdRef.current = "";
@@ -4720,24 +6684,61 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     setReportMainSettingsDraft(INITIAL_REPORT_MAIN_SETTINGS_DRAFT);
     setIsCreatingReportCard(true);
     setIsReportMainSettingsEditMode(true);
+    startReportCardListTransition();
     setIsReportCardPanelOpen(true);
     setIsColumnSettingsOpen(false);
   };
 
   const handleCloseEmployeeCardPanel = () => {
+    if (employeeCardCloseCleanupTimeoutRef.current) {
+      window.clearTimeout(employeeCardCloseCleanupTimeoutRef.current);
+      employeeCardCloseCleanupTimeoutRef.current = 0;
+    }
+    startEmployeeCardListTransition();
     setIsEmployeeCardPanelOpen(false);
-    setIsCreatingEmployeeCard(false);
-    setIsEmployeeCardEditMode(false);
-    setEmployeeCardEditForm(INITIAL_EMPLOYEE_CARD_EDIT_FORM);
-    setSelectedEmployeeSnapshot(null);
-    setSelectedEmployeeId("");
-    setLinkedEmployeeIdFilter("");
-    setIsLinkedEmployeeLookupActive(false);
-    setHasLinkedEmployeeLookupAttempt(false);
-    setEmployeeIdToUrl("");
+    employeeCardCloseCleanupTimeoutRef.current = window.setTimeout(() => {
+      setIsCreatingEmployeeCard(false);
+      setIsEmployeeCardEditMode(false);
+      setEmployeeCardEditForm(INITIAL_EMPLOYEE_CARD_EDIT_FORM);
+      setSelectedEmployeeSnapshot(null);
+      setSelectedEmployeeId("");
+      setLinkedEmployeeIdFilter("");
+      setIsLinkedEmployeeLookupActive(false);
+      setHasLinkedEmployeeLookupAttempt(false);
+      setEmployeeIdToUrl("");
+      employeeCardCloseCleanupTimeoutRef.current = 0;
+    }, SIDE_CARD_TRANSITION_MS);
+  };
+
+  const handleCloseOrganizationCardPanel = () => {
+    setIsOrganizationCardPanelOpen(false);
+    setActiveOrganizationCardTab(ORGANIZATION_CARD_TABS.MAIN);
+    setIsOrganizationCardEditMode(false);
+    setOrganizationCardEditForm(INITIAL_ORGANIZATION_CARD_EDIT_FORM);
+    setActiveOrganizationEditCombo(null);
+    setOrganizationTypeEditFilter("");
+    setCountryEditFilter("");
+    setOrganizationEditComboMenuLayouts({});
+    setPendingOrganizationDelete(null);
+    setOrganizationDadataCollapsedSections({
+      company: false,
+      address: false
+    });
+    setSelectedDadataRowBySection({
+      company: "",
+      address: ""
+    });
+    organizationDadataAutoRefreshAttemptedRef.current = new Set();
+    setSelectedOrganizationSnapshot(null);
+    setSelectedOrganizationId("");
+    setLinkedOrganizationIdFilter("");
+    setIsLinkedOrganizationLookupActive(false);
+    setHasLinkedOrganizationLookupAttempt(false);
+    setOrganizationIdToUrl("");
   };
 
   const handleCloseReportCardPanel = () => {
+    startReportCardListTransition();
     setIsReportCardPanelOpen(false);
     setActiveReportCardTab(REPORT_CARD_TABS.MAIN);
     setIsCreatingReportCard(false);
@@ -4746,8 +6747,18 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     setIsReportDeleting(false);
     setPendingReportDelete(null);
     setReportMainSettingsDraft(INITIAL_REPORT_MAIN_SETTINGS_DRAFT);
+    setIsReportOrganizationAddMode(false);
+    setIsReportOrganizationComboOpen(false);
+    setReportOrganizationSearch("");
+    setReportOrganizationOptions([]);
+    setSelectedReportOrganizationIdForAdd("");
     setIsReportAccessGroupAddMode(false);
     setNewReportAccessGroupCode(REPORT_ACCESS_GROUP_ENUM[0]);
+    setIsReportRecipientAddMode(false);
+    setNewReportRecipientEmail("");
+    setDeletingReportOrganizationId("");
+    setDeletingReportAccessGroupCode("");
+    setDeletingReportRecipientEmail("");
     setIsReportTemplateEditMode(false);
     setReportTemplateViewMode(REPORT_TEMPLATE_VIEW_MODES.SETTINGS);
     setIsReportTemplateJsonEditMode(false);
@@ -5091,7 +7102,7 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
         body: JSON.stringify(
           toCamelApiPayload({
               reportTemplateId,
-              limit: REPORT_SQL_RESULTS_PAGE_SIZE,
+              limit: REPORT_SQL_RESULTS_PREVIEW_LIMIT,
               offset: pageToLoad,
               ...buildReportExecutionPayload(reportTemplateId)
           })
@@ -5106,7 +7117,7 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
           body: JSON.stringify(
             toCamelApiPayload({
                 reportTemplateId,
-                limit: REPORT_SQL_RESULTS_PAGE_SIZE,
+                limit: REPORT_SQL_RESULTS_PREVIEW_LIMIT,
                 offset: pageToLoad,
                 ...buildReportExecutionPayload(reportTemplateId)
             })
@@ -5130,11 +7141,13 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
         const nextColumns = Array.isArray(data?.columns)
           ? data.columns.map((value) => String(value ?? ""))
           : [];
-        const nextRows = Array.isArray(data?.rows) ? data.rows : [];
+        const nextRows = Array.isArray(data?.rows)
+          ? data.rows.slice(0, REPORT_SQL_RESULTS_PREVIEW_LIMIT)
+          : [];
         setReportSqlResultsColumns((prev) => (reset || prev.length === 0 ? nextColumns : prev));
         setReportSqlResultsRows((prev) => (reset ? nextRows : [...prev, ...nextRows]));
         setReportSqlResultsPage(pageToLoad);
-        setReportSqlResultsHasMore(Boolean(data?.hasMore));
+        setReportSqlResultsHasMore(false);
         setReportSqlResultsStats({
         executionTime: String(data?.executionTime ?? "00:00:000"),
         executionMs: Number(data?.executionMs ?? 0),
@@ -5199,17 +7212,23 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     void loadReportSqlResults({ reset: true });
   };
 
-  const getReportSqlResultsSortDirectionForField = (fieldName) => {
-    const match = reportSqlResultsSortRules.find((rule) => rule.field === fieldName);
-    return match ? match.direction : null;
-  };
+  const getReportSqlResultsSortDirectionForField = useCallback(
+    (fieldName) => {
+      const match = reportSqlResultsSortRules.find((rule) => rule.field === fieldName);
+      return match ? match.direction : null;
+    },
+    [reportSqlResultsSortRules]
+  );
 
-  const getReportSqlResultsSortOrderForField = (fieldName) => {
-    const sortIndex = reportSqlResultsSortRules.findIndex((rule) => rule.field === fieldName);
-    return sortIndex >= 0 ? sortIndex + 1 : null;
-  };
+  const getReportSqlResultsSortOrderForField = useCallback(
+    (fieldName) => {
+      const sortIndex = reportSqlResultsSortRules.findIndex((rule) => rule.field === fieldName);
+      return sortIndex >= 0 ? sortIndex + 1 : null;
+    },
+    [reportSqlResultsSortRules]
+  );
 
-  const handleReportSqlResultsSortClick = (fieldName) => {
+  const handleReportSqlResultsSortClick = useCallback((fieldName) => {
     setReportSqlResultsSortRules((prev) => {
       const existingRule = prev.find((rule) => rule.field === fieldName);
       if (!existingRule) {
@@ -5222,8 +7241,23 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
       }
       return prev.filter((rule) => rule.field !== fieldName);
     });
-  };
-
+  }, []);
+  const formatReportSqlResultCellValue = useCallback(
+    (value) => {
+      if (value === null || value === undefined) {
+        return "";
+      }
+      if (typeof value === "object") {
+        try {
+          return JSON.stringify(value);
+        } catch {
+          return String(value);
+        }
+      }
+      return String(value);
+    },
+    []
+  );
   const getSortedReportTemplateFieldDescriptors = useCallback(
     (fields) => getSortedReportTemplateFieldDescriptorsBase(fields),
     []
@@ -5257,9 +7291,11 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
       ),
     [reportTemplateFieldsColumnWidths]
   );
+  const reportTemplateJsonFontSizePx = REPORT_TEMPLATE_JSON_BASE_FONT_SIZE_PX * reportTemplateJsonZoom;
+  const reportTemplateJsonLineHeightPx = REPORT_TEMPLATE_JSON_LINE_HEIGHT_PX * reportTemplateJsonZoom;
   const reportTemplateJsonActiveLineTopPx =
     REPORT_TEMPLATE_JSON_PADDING_PX +
-    (Math.max(1, reportTemplateJsonActiveLine) - 1) * REPORT_TEMPLATE_JSON_LINE_HEIGHT_PX -
+    (Math.max(1, reportTemplateJsonActiveLine) - 1) * reportTemplateJsonLineHeightPx -
     reportTemplateJsonEditorScrollTop;
   const reportTemplateJsonLineNumbers = useMemo(() => {
     const lineCount = Math.max(1, String(reportTemplateJsonDraft ?? "").split("\n").length);
@@ -5345,6 +7381,176 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     [isReportTemplateEditMode, reportTemplateSettingsDraft.fields]
   );
 
+  const stopReportTemplateFieldDragAutoScroll = useCallback(() => {
+    const state = reportTemplateFieldsDragAutoScrollStateRef.current;
+    if (state.rafId) {
+      cancelAnimationFrame(state.rafId);
+    }
+    state.rafId = 0;
+    state.wrapper = null;
+    state.direction = 0;
+    state.speed = 0;
+  }, []);
+
+  const getDragClientYForReportTemplateFields = useCallback((event) => {
+    const directClientY = Number(event?.clientY);
+    if (Number.isFinite(directClientY)) {
+      return directClientY;
+    }
+    const nativeClientY = Number(event?.nativeEvent?.clientY);
+    if (Number.isFinite(nativeClientY)) {
+      return nativeClientY;
+    }
+    const pageY = Number(event?.pageY ?? event?.nativeEvent?.pageY);
+    if (Number.isFinite(pageY)) {
+      return pageY - window.scrollY;
+    }
+    return null;
+  }, []);
+
+  const resolveReportTemplateFieldScrollContainer = useCallback(() => {
+    const wrapper = reportTemplateFieldsTableWrapperRef.current;
+    if (!(wrapper instanceof HTMLElement)) {
+      return null;
+    }
+    if (wrapper.scrollHeight > wrapper.clientHeight + 1) {
+      return wrapper;
+    }
+    let node = wrapper.parentElement;
+    while (node instanceof HTMLElement) {
+      const style = window.getComputedStyle(node);
+      const overflowY = String(style.overflowY ?? "").toLowerCase();
+      const isScrollableOverflow = overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay";
+      if (isScrollableOverflow && node.scrollHeight > node.clientHeight + 1) {
+        return node;
+      }
+      node = node.parentElement;
+    }
+    return wrapper;
+  }, []);
+
+  const updateReportTemplateFieldDragAutoScroll = useCallback((clientY) => {
+    if (!Number.isFinite(clientY)) {
+      return;
+    }
+    const scrollContainer = resolveReportTemplateFieldScrollContainer();
+    if (!(scrollContainer instanceof HTMLElement)) {
+      return;
+    }
+    const bounds = scrollContainer.getBoundingClientRect();
+    const edgeThresholdPx = 136;
+    const outsideBoostDistancePx = 320;
+    let direction = 0;
+    let speed = 0;
+    if (clientY < bounds.top + edgeThresholdPx) {
+      direction = -1;
+      const outsideDistance = Math.max(0, bounds.top - clientY);
+      if (outsideDistance > 0) {
+        const outsideRatio = Math.min(1, outsideDistance / outsideBoostDistancePx);
+        speed = Math.ceil(480 + outsideRatio * 1150);
+      } else {
+        const insideRatio = Math.min(
+          1,
+          Math.max(0, (bounds.top + edgeThresholdPx - clientY) / edgeThresholdPx)
+        );
+        speed = Math.ceil(170 + insideRatio * 560);
+      }
+    } else if (clientY > bounds.bottom - edgeThresholdPx) {
+      direction = 1;
+      const outsideDistance = Math.max(0, clientY - bounds.bottom);
+      if (outsideDistance > 0) {
+        const outsideRatio = Math.min(1, outsideDistance / outsideBoostDistancePx);
+        speed = Math.ceil(480 + outsideRatio * 1150);
+      } else {
+        const insideRatio = Math.min(
+          1,
+          Math.max(0, (clientY - (bounds.bottom - edgeThresholdPx)) / edgeThresholdPx)
+        );
+        speed = Math.ceil(170 + insideRatio * 560);
+      }
+    }
+    speed = Math.min(1750, Math.max(0, speed));
+    const state = reportTemplateFieldsDragAutoScrollStateRef.current;
+    state.wrapper = scrollContainer;
+    state.direction = direction;
+    state.speed = direction && speed > 0 ? speed : 0;
+    if (!state.direction || state.speed <= 0) {
+      if (state.rafId) {
+        cancelAnimationFrame(state.rafId);
+      }
+      state.rafId = 0;
+      return;
+    }
+    if (state.rafId) {
+      return;
+    }
+    let lastTimestamp = 0;
+    const tick = () => {
+      const activeState = reportTemplateFieldsDragAutoScrollStateRef.current;
+      if (!activeState.rafId || !(activeState.wrapper instanceof HTMLElement)) {
+        activeState.rafId = 0;
+        return;
+      }
+      if (activeState.direction && activeState.speed > 0) {
+        const now = performance.now();
+        if (!lastTimestamp) {
+          lastTimestamp = now;
+        }
+        const deltaMs = Math.min(40, Math.max(8, now - lastTimestamp));
+        lastTimestamp = now;
+        activeState.wrapper.scrollTop +=
+          activeState.direction * (activeState.speed * deltaMs) / 1000;
+      } else {
+        activeState.rafId = 0;
+        return;
+      }
+      activeState.rafId = requestAnimationFrame(tick);
+    };
+    state.rafId = requestAnimationFrame(tick);
+  }, [resolveReportTemplateFieldScrollContainer]);
+
+  const handleReportTemplateFieldDrag = useCallback(
+    (event) => {
+      if (
+        reportTemplateFieldsDragSourceRef.current === null ||
+        reportTemplateFieldsDragSourceRef.current === undefined
+      ) {
+        return;
+      }
+      const clientY = getDragClientYForReportTemplateFields(event);
+      if (Number.isFinite(clientY)) {
+        updateReportTemplateFieldDragAutoScroll(clientY);
+      }
+    },
+    [
+      getDragClientYForReportTemplateFields,
+      updateReportTemplateFieldDragAutoScroll
+    ]
+  );
+
+  const handleReportTemplateFieldsWrapperDragOver = useCallback(
+    (event) => {
+      if (!isReportTemplateEditMode) {
+        return;
+      }
+      if (
+        reportTemplateFieldsDragSourceRef.current === null ||
+        reportTemplateFieldsDragSourceRef.current === undefined
+      ) {
+        return;
+      }
+      const clientY = getDragClientYForReportTemplateFields(event);
+      if (Number.isFinite(clientY)) {
+        updateReportTemplateFieldDragAutoScroll(clientY);
+      }
+    },
+    [
+      getDragClientYForReportTemplateFields,
+      isReportTemplateEditMode,
+      updateReportTemplateFieldDragAutoScroll
+    ]
+  );
+
   const handleReportTemplateFieldDragOver = useCallback(
     (targetIndex, event) => {
       if (!isReportTemplateEditMode) {
@@ -5365,28 +7571,17 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
       }
       event.preventDefault();
       event.dataTransfer.dropEffect = "move";
-      const wrapper = reportTemplateFieldsTableWrapperRef.current;
-      if (!wrapper) {
-        return;
-      }
-      const rect = wrapper.getBoundingClientRect();
-      const threshold = Math.min(140, Math.max(56, rect.height * 0.28));
-      const upperZoneEnd = rect.top + threshold;
-      const lowerZoneStart = rect.bottom - threshold;
-      if (event.clientY < upperZoneEnd) {
-        const ratio = Math.min(1, Math.max(0, (upperZoneEnd - event.clientY) / threshold));
-        const scrollDelta = Math.max(12, Math.round(ratio * 48));
-        wrapper.scrollTop = Math.max(0, wrapper.scrollTop - scrollDelta);
-        return;
-      }
-      if (event.clientY > lowerZoneStart) {
-        const ratio = Math.min(1, Math.max(0, (event.clientY - lowerZoneStart) / threshold));
-        const scrollDelta = Math.max(12, Math.round(ratio * 48));
-        const maxScrollTop = Math.max(0, wrapper.scrollHeight - wrapper.clientHeight);
-        wrapper.scrollTop = Math.min(maxScrollTop, wrapper.scrollTop + scrollDelta);
+      const clientY = getDragClientYForReportTemplateFields(event);
+      if (Number.isFinite(clientY)) {
+        updateReportTemplateFieldDragAutoScroll(clientY);
       }
     },
-    [isReportTemplateEditMode, reportTemplateSettingsDraft.fields]
+    [
+      getDragClientYForReportTemplateFields,
+      isReportTemplateEditMode,
+      reportTemplateSettingsDraft.fields,
+      updateReportTemplateFieldDragAutoScroll
+    ]
   );
 
   const handleReportTemplateFieldDrop = useCallback(
@@ -5395,6 +7590,7 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
         return;
       }
       event.preventDefault();
+      stopReportTemplateFieldDragAutoScroll();
       const sourceIndex = reportTemplateFieldsDragSourceRef.current;
       reportTemplateFieldsDragSourceRef.current = null;
       if (sourceIndex === null || sourceIndex === undefined || sourceIndex === targetIndex) {
@@ -5438,17 +7634,67 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
         };
       });
     },
-    [getSortedReportTemplateFieldDescriptors, isReportTemplateEditMode]
+    [
+      getSortedReportTemplateFieldDescriptors,
+      isReportTemplateEditMode,
+      stopReportTemplateFieldDragAutoScroll
+    ]
   );
 
   const handleReportTemplateFieldDragEnd = useCallback(() => {
+    stopReportTemplateFieldDragAutoScroll();
     reportTemplateFieldsDragSourceRef.current = null;
     const dragImageNode = reportTemplateFieldsDragImageRef.current;
     if (dragImageNode?.parentNode) {
       dragImageNode.parentNode.removeChild(dragImageNode);
     }
     reportTemplateFieldsDragImageRef.current = null;
-  }, []);
+  }, [stopReportTemplateFieldDragAutoScroll]);
+
+  useEffect(
+    () => () => {
+      stopReportTemplateFieldDragAutoScroll();
+    },
+    [stopReportTemplateFieldDragAutoScroll]
+  );
+
+  useEffect(() => {
+    const handleWindowDragOver = (event) => {
+      if (
+        reportTemplateFieldsDragSourceRef.current === null ||
+        reportTemplateFieldsDragSourceRef.current === undefined
+      ) {
+        return;
+      }
+      const clientY = getDragClientYForReportTemplateFields(event);
+      if (!Number.isFinite(clientY)) {
+        return;
+      }
+      updateReportTemplateFieldDragAutoScroll(clientY);
+    };
+    const handleWindowDrag = (event) => {
+      if (
+        reportTemplateFieldsDragSourceRef.current === null ||
+        reportTemplateFieldsDragSourceRef.current === undefined
+      ) {
+        return;
+      }
+      const clientY = getDragClientYForReportTemplateFields(event);
+      if (!Number.isFinite(clientY)) {
+        return;
+      }
+      updateReportTemplateFieldDragAutoScroll(clientY);
+    };
+    window.addEventListener("dragover", handleWindowDragOver);
+    window.addEventListener("drag", handleWindowDrag);
+    return () => {
+      window.removeEventListener("dragover", handleWindowDragOver);
+      window.removeEventListener("drag", handleWindowDrag);
+    };
+  }, [
+    getDragClientYForReportTemplateFields,
+    updateReportTemplateFieldDragAutoScroll
+  ]);
 
   const stringifyReportTemplateJson = useCallback((value) => {
     try {
@@ -5459,39 +7705,21 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
   }, []);
 
   const reportTemplateGeneralSettingsRows = useMemo(() => {
-    const rows = [
-      { key: "showLogoReport", label: "Отображение логотипа", type: "boolean" },
-      { key: "headerCaption", label: "Заголовок отчета", type: "text" },
-      { key: "headerFontSize", label: "Размер шрифта заголовка отчета, px", type: "number" },
-      { key: "headerFontColor", label: "Цвет шрифта заголовка отчета", type: "color" },
-      { key: "heightTabCaption", label: "Высота табличного заголовка, px", type: "number" },
-      { key: "backTabCaptionColor", label: "Цвет фона табличного заголовка", type: "color" },
-      { key: "fontTabCaptionColor", label: "Цвет шрифта табличного заголовка", type: "color" },
-      { key: "fontTabCaptionSize", label: "Размер шрифта табличного заголовка, px", type: "number" },
-      { key: "recordFontSize", label: "Размер шрифта записей таблицы, px", type: "number" },
-      { key: "startReportRow", label: "Номер начальной строки отчета", type: "number" },
-      { key: "startReportCol", label: "Номер начальной колонки отчета", type: "number" },
-      { key: "filtrSet", label: "Включить фильтр", type: "boolean" }
-    ];
-    rows.sort((left, right) => {
-      const compareResult = left.label.localeCompare(right.label, "ru-RU", {
-        sensitivity: "base",
-        numeric: true
-      });
-      return reportTemplateGeneralSettingsSortDirection === REPORT_TEMPLATE_GENERAL_SETTINGS_SORT_DIRECTIONS.DESC
-        ? -compareResult
-        : compareResult;
-    });
-    return rows;
+    return reportTemplateGeneralSettingsSortDirection === REPORT_TEMPLATE_GENERAL_SETTINGS_SORT_DIRECTIONS.DESC
+      ? [...REPORT_TEMPLATE_GENERAL_SETTINGS_ROWS_ASC].reverse()
+      : REPORT_TEMPLATE_GENERAL_SETTINGS_ROWS_ASC;
   }, [reportTemplateGeneralSettingsSortDirection]);
 
   const handleToggleReportTemplateGeneralSettingsSort = () => {
-    setReportTemplateGeneralSettingsSortDirection((prev) =>
-      prev === REPORT_TEMPLATE_GENERAL_SETTINGS_SORT_DIRECTIONS.ASC
-        ? REPORT_TEMPLATE_GENERAL_SETTINGS_SORT_DIRECTIONS.DESC
-        : REPORT_TEMPLATE_GENERAL_SETTINGS_SORT_DIRECTIONS.ASC
-    );
+    startTransition(() => {
+      setReportTemplateGeneralSettingsSortDirection((prev) =>
+        prev === REPORT_TEMPLATE_GENERAL_SETTINGS_SORT_DIRECTIONS.ASC
+          ? REPORT_TEMPLATE_GENERAL_SETTINGS_SORT_DIRECTIONS.DESC
+          : REPORT_TEMPLATE_GENERAL_SETTINGS_SORT_DIRECTIONS.ASC
+      );
+    });
   };
+
 
   const handleResizeReportTemplateGeneralSettingsParameterColumnStart = (event) => {
     event.preventDefault();
@@ -5526,6 +7754,7 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
 
   const loadReportTemplateSettings = useCallback(async () => {
     const reportTemplateId = String(selectedReportTemplateId ?? "").trim();
+    setIsReportTemplateSqlSyncing(false);
     if (!reportTemplateId) {
       const defaults = buildDefaultReportTemplateSettings(reportMainSettingsDraft.name ?? "");
       setReportTemplateSettingsInitial(defaults);
@@ -5570,59 +7799,6 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
           : buildDefaultReportTemplateSettings(reportName);
       let reportInfoRaw = sourceReportInfo;
       let reportInfoJsonText = String(data?.item?.reportInfoJson ?? "").trim();
-      try {
-        const sqlColumns = await loadSqlColumnsForReportTemplate(reportTemplateId);
-        const reconciled = reconcileReportTemplateFieldsWithSqlColumns(sourceReportInfo?.fields, sqlColumns, {
-          addMissing: false
-        });
-        setReportTemplateLinkFieldOptions(reconciled.linkColumns);
-        const currentFields = Array.isArray(sourceReportInfo?.fields)
-          ? sourceReportInfo.fields.map((field, index) => normalizeReportTemplateField(field, index))
-          : [];
-        const fieldsChanged =
-          JSON.stringify(currentFields) !== JSON.stringify(reconciled.fields);
-        if (fieldsChanged) {
-          const nextReportInfo = {
-            ...(sourceReportInfo && typeof sourceReportInfo === "object" ? sourceReportInfo : {}),
-            fields: reconciled.fields
-          };
-          reportInfoRaw = nextReportInfo;
-          reportInfoJsonText = stringifyReportTemplateJson(nextReportInfo);
-          try {
-            let persistResponse = await fetch(REPORT_TEMPLATE_SETTINGS_API_PATH(reportTemplateId), {
-              method: "PATCH",
-              headers: {
-                "Content-Type": "application/json"
-              },
-              body: JSON.stringify(toCamelApiPayload({ reportInfo: nextReportInfo }))
-            });
-            if (persistResponse.status === 404) {
-              persistResponse = await fetch(REPORT_TEMPLATES_SETTINGS_API_PATH(reportTemplateId), {
-                method: "PATCH",
-                headers: {
-                  "Content-Type": "application/json"
-                },
-                body: JSON.stringify(toCamelApiPayload({ reportInfo: nextReportInfo }))
-              });
-            }
-            const persistData = await persistResponse.json();
-            if (persistResponse.ok) {
-              const persistedInfo =
-                persistData?.item?.reportInfo && typeof persistData.item.reportInfo === "object"
-                  ? persistData.item.reportInfo
-                  : nextReportInfo;
-              reportInfoRaw = persistedInfo;
-              reportInfoJsonText =
-                String(persistData?.item?.reportInfoJson ?? "").trim() ||
-                stringifyReportTemplateJson(persistedInfo);
-            }
-          } catch {
-            // Оставляем локально очищенные данные даже если фоновое сохранение не удалось.
-          }
-        }
-      } catch {
-        setReportTemplateLinkFieldOptions([]);
-      }
       const normalizedSettings = normalizeReportTemplateSettings(reportInfoRaw, reportName);
       setReportTemplateSettingsInitial(normalizedSettings);
       setReportTemplateSettingsDraft(normalizedSettings);
@@ -5640,9 +7816,87 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
       setReportTemplateLogoInitialMimeType(
         String(data?.item?.reportLogoMimeType ?? "").trim() || null
       );
+      const recipientsFromApi = Array.isArray(data?.item?.recipients)
+        ? data.item.recipients
+            .map((item) => ({ email: String(item?.email ?? "").trim().toLowerCase() }))
+            .filter((item) => item.email)
+        : null;
+      if (Array.isArray(recipientsFromApi)) {
+        const applyRecipientsUpdate = (row) => {
+          if (String(row?.reportTemplateId ?? "").trim() !== reportTemplateId) {
+            return row;
+          }
+          return { ...row, recipients: recipientsFromApi };
+        };
+        setEmployees((prev) => prev.map((row) => applyRecipientsUpdate(row)));
+        setSelectedReportSnapshot((prev) => (prev ? applyRecipientsUpdate(prev) : prev));
+      }
       setHasReportTemplateContentLoaded(true);
+      setIsReportTemplateSqlSyncing(true);
+      void (async () => {
+        try {
+          const sqlColumns = await loadSqlColumnsForReportTemplate(
+            reportTemplateId,
+            buildReportExecutionPayload(reportTemplateId)
+          );
+          if (reportTemplateSettingsLoadedForIdRef.current !== reportTemplateId) {
+            return;
+          }
+          const reconciled = reconcileReportTemplateFieldsWithSqlColumns(sourceReportInfo?.fields, sqlColumns, {
+            addMissing: false
+          });
+          setReportTemplateLinkFieldOptions(reconciled.linkColumns);
+          const currentFields = Array.isArray(sourceReportInfo?.fields)
+            ? sourceReportInfo.fields.map((field, index) => normalizeReportTemplateField(field, index))
+            : [];
+          const fieldsChanged =
+            JSON.stringify(currentFields) !== JSON.stringify(reconciled.fields);
+          if (!fieldsChanged) {
+            return;
+          }
+          const nextReportInfo = {
+            ...(sourceReportInfo && typeof sourceReportInfo === "object" ? sourceReportInfo : {}),
+            fields: reconciled.fields
+          };
+          const normalizedReconciledSettings = normalizeReportTemplateSettings(nextReportInfo, reportName);
+          const reconciledJsonText = stringifyReportTemplateJson(nextReportInfo);
+          setReportTemplateSettingsInitial(normalizedReconciledSettings);
+          setReportTemplateSettingsDraft(normalizedReconciledSettings);
+          setReportTemplateJsonInitial(reconciledJsonText);
+          setReportTemplateJsonDraft(reconciledJsonText);
+          try {
+            let persistResponse = await fetch(REPORT_TEMPLATE_SETTINGS_API_PATH(reportTemplateId), {
+              method: "PATCH",
+              headers: {
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify(toCamelApiPayload({ reportInfo: nextReportInfo }))
+            });
+            if (persistResponse.status === 404) {
+              persistResponse = await fetch(REPORT_TEMPLATES_SETTINGS_API_PATH(reportTemplateId), {
+                method: "PATCH",
+                headers: {
+                  "Content-Type": "application/json"
+                },
+                body: JSON.stringify(toCamelApiPayload({ reportInfo: nextReportInfo }))
+              });
+            }
+          } catch {
+            // Оставляем локально очищенные данные даже если фоновое сохранение не удалось.
+          }
+        } catch {
+          if (reportTemplateSettingsLoadedForIdRef.current === reportTemplateId) {
+            setReportTemplateLinkFieldOptions([]);
+          }
+        } finally {
+          if (reportTemplateSettingsLoadedForIdRef.current === reportTemplateId) {
+            setIsReportTemplateSqlSyncing(false);
+          }
+        }
+      })();
     } catch {
       reportTemplateSettingsLoadedForIdRef.current = "";
+      setIsReportTemplateSqlSyncing(false);
       showSystemErrorToast("Ошибка получения настроек шаблона отчета");
     } finally {
       setIsReportTemplateSettingsLoading(false);
@@ -5666,6 +7920,18 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
 
   useEffect(() => {
     return () => {
+      if (reportCardTransitionTimeoutRef.current) {
+        window.clearTimeout(reportCardTransitionTimeoutRef.current);
+        reportCardTransitionTimeoutRef.current = 0;
+      }
+      if (employeeCardTransitionTimeoutRef.current) {
+        window.clearTimeout(employeeCardTransitionTimeoutRef.current);
+        employeeCardTransitionTimeoutRef.current = 0;
+      }
+      if (employeeCardCloseCleanupTimeoutRef.current) {
+        window.clearTimeout(employeeCardCloseCleanupTimeoutRef.current);
+        employeeCardCloseCleanupTimeoutRef.current = 0;
+      }
       const generalResizeHandlers = reportTemplateGeneralSettingsResizeRef.current;
       if (generalResizeHandlers) {
         window.removeEventListener("mousemove", generalResizeHandlers.handleMouseMove);
@@ -5974,6 +8240,30 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
       }
       const item = data?.item ?? {};
       const savedReportTemplateId = String(item?.reportTemplateId ?? reportTemplateId).trim();
+      const currentSqlQuery = String(
+        selectedReport?.sqlQuery ?? selectedReport?.sql_query ?? ""
+      ).trim();
+      const savedSqlQuery = String(
+        item?.sqlQuery ?? item?.sql_query ?? (isCreateMode ? "" : currentSqlQuery)
+      ).trim();
+      const currentOrganizations = Array.isArray(selectedReport?.organizations)
+        ? selectedReport.organizations
+        : [];
+      const currentAccessGroups = Array.isArray(selectedReport?.accessGroups)
+        ? selectedReport.accessGroups
+        : [];
+      const currentRecipients = Array.isArray(selectedReport?.recipients)
+        ? selectedReport.recipients
+        : [];
+      const savedOrganizations = Array.isArray(item?.organizations)
+        ? item.organizations
+        : (isCreateMode ? [] : currentOrganizations);
+      const savedAccessGroups = Array.isArray(item?.accessGroups)
+        ? item.accessGroups
+        : (isCreateMode ? [] : currentAccessGroups);
+      const savedRecipients = Array.isArray(item?.recipients)
+        ? item.recipients
+        : (isCreateMode ? [] : currentRecipients);
       const patch = {
         reportTemplateId: savedReportTemplateId,
         codeReport: String(item?.codeReport ?? codeReport).trim(),
@@ -5984,10 +8274,12 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
         outputFileName: String(item?.outputFileName ?? outputFileName).trim(),
         outputFileType: String(item?.outputFileType ?? outputFileType).trim(),
         status: String(item?.status ?? status).trim(),
-        sqlQuery: String(item?.sqlQuery ?? "").trim(),
+        sqlQuery: savedSqlQuery,
+        sql_query: savedSqlQuery,
         reportInfo: item?.reportInfo ?? null,
-        organizations: Array.isArray(item?.organizations) ? item.organizations : [],
-        accessGroups: Array.isArray(item?.accessGroups) ? item.accessGroups : []
+        organizations: savedOrganizations,
+        accessGroups: savedAccessGroups,
+        recipients: savedRecipients
       };
       if (isCreateMode) {
         setEmployees((prev) => {
@@ -6093,6 +8385,14 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     }
   };
 
+  const handleIncreaseReportTemplateJsonZoom = () => {
+    setReportTemplateJsonZoom((prev) => Math.min(1.6, Number((prev + 0.1).toFixed(2))));
+  };
+
+  const handleDecreaseReportTemplateJsonZoom = () => {
+    setReportTemplateJsonZoom((prev) => Math.max(0.7, Number((prev - 0.1).toFixed(2))));
+  };
+
   const handleDownloadReportTemplateJson = () => {
     if (isReportTemplateSettingsSaving || isReportTemplateJsonEditMode) {
       return;
@@ -6170,7 +8470,16 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
 
   const handleReportTemplateJsonEditorSelect = (event) => {
     const editor = event.currentTarget;
-    setReportTemplateJsonActiveLine(resolveReportSqlCaretLine(editor.value, editor.selectionStart));
+    if (reportTemplateJsonCaretRafRef.current) {
+      cancelAnimationFrame(reportTemplateJsonCaretRafRef.current);
+    }
+    reportTemplateJsonCaretRafRef.current = requestAnimationFrame(() => {
+      const nextLine = resolveReportSqlCaretLine(editor.value, editor.selectionStart);
+      setReportTemplateJsonActiveLine((prev) => (prev === nextLine ? prev : nextLine));
+      const nextScrollTop = Math.max(0, Number(editor.scrollTop) || 0);
+      setReportTemplateJsonEditorScrollTop((prev) => (prev === nextScrollTop ? prev : nextScrollTop));
+      reportTemplateJsonCaretRafRef.current = 0;
+    });
   };
 
   const handleReportTemplateJsonEditorScroll = (event) => {
@@ -6303,18 +8612,25 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
         return null;
       }
       try {
-        const columns = await loadSqlColumnsForReportTemplate(reportTemplateId);
+        const columns = await loadSqlColumnsForReportTemplate(
+          reportTemplateId,
+          buildReportExecutionPayload(reportTemplateId)
+        );
         const linkColumns = columns.filter((value) => /^LINK_/i.test(value));
         setReportTemplateLinkFieldOptions(linkColumns);
         return columns;
-      } catch {
+      } catch (error) {
         if (showErrorToast) {
-          showSystemErrorToast("Не удалось получить поля SQL-скрипта");
+          const message =
+            error instanceof Error && String(error.message ?? "").trim()
+              ? String(error.message)
+              : "Не удалось получить поля SQL-скрипта";
+          showSystemErrorToast(message);
         }
         return null;
       }
     },
-    [selectedReportTemplateId, showSystemErrorToast]
+    [buildReportExecutionPayload, selectedReportTemplateId, showSystemErrorToast]
   );
 
   const handleRefreshReportTemplateFieldsFromSql = async () => {
@@ -6335,6 +8651,19 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
         ...prev,
         fields: reconciled.fields
       }));
+      setReportTemplateJsonDraft((prevJsonText) => {
+        let parsedJson;
+        try {
+          parsedJson = JSON.parse(String(prevJsonText ?? "{}"));
+        } catch {
+          parsedJson = {};
+        }
+        const nextJson =
+          parsedJson && typeof parsedJson === "object" && !Array.isArray(parsedJson)
+            ? { ...parsedJson, fields: reconciled.fields }
+            : { fields: reconciled.fields };
+        return stringifyReportTemplateJson(nextJson);
+      });
       showSystemSuccessToast("Список полей обновлен из SQL-скрипта");
     } catch {
       showSystemErrorToast("Не удалось обновить список полей из SQL-скрипта");
@@ -6534,7 +8863,11 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
   };
 
   const handleDeleteReportOrganization = async (organUnitId) => {
-    if (deletingReportOrganizationId || deletingReportAccessGroupCode) {
+    if (
+      deletingReportOrganizationId ||
+      deletingReportAccessGroupCode ||
+      deletingReportRecipientEmail
+    ) {
       return;
     }
     const reportTemplateId = String(selectedReportTemplateId ?? "").trim();
@@ -6646,7 +8979,12 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
   };
 
   const handleAddReportOrganization = async () => {
-    if (addingReportOrganization || deletingReportOrganizationId || deletingReportAccessGroupCode) {
+    if (
+      addingReportOrganization ||
+      deletingReportOrganizationId ||
+      deletingReportAccessGroupCode ||
+      deletingReportRecipientEmail
+    ) {
       return;
     }
     const reportTemplateId = String(selectedReportTemplateId ?? "").trim();
@@ -6716,7 +9054,11 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
   };
 
   const handleDeleteReportAccessGroup = async (codeAccess) => {
-    if (deletingReportOrganizationId || deletingReportAccessGroupCode) {
+    if (
+      deletingReportOrganizationId ||
+      deletingReportAccessGroupCode ||
+      deletingReportRecipientEmail
+    ) {
       return;
     }
     const reportTemplateId = String(selectedReportTemplateId ?? "").trim();
@@ -6772,7 +9114,12 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
   };
 
   const handleAddReportAccessGroup = async () => {
-    if (addingReportAccessGroup || deletingReportOrganizationId || deletingReportAccessGroupCode) {
+    if (
+      addingReportAccessGroup ||
+      deletingReportOrganizationId ||
+      deletingReportAccessGroupCode ||
+      deletingReportRecipientEmail
+    ) {
       return;
     }
     const reportTemplateId = String(selectedReportTemplateId ?? "").trim();
@@ -6838,6 +9185,138 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     }
   };
 
+  const handleOpenReportRecipientAdd = () => {
+    setIsReportRecipientAddMode(true);
+    setNewReportRecipientEmail("");
+  };
+
+  const handleCancelReportRecipientAdd = () => {
+    setIsReportRecipientAddMode(false);
+    setNewReportRecipientEmail("");
+  };
+
+  const handleAddReportRecipient = async () => {
+    if (
+      addingReportRecipient ||
+      deletingReportOrganizationId ||
+      deletingReportAccessGroupCode ||
+      deletingReportRecipientEmail
+    ) {
+      return;
+    }
+    const reportTemplateId = String(selectedReportTemplateId ?? "").trim();
+    const email = String(newReportRecipientEmail ?? "").trim().toLowerCase();
+    if (!reportTemplateId || !email) {
+      showSystemErrorToast("Укажите email получателя отчета");
+      return;
+    }
+    if (!EMAIL_PATTERN.test(email)) {
+      showSystemErrorToast("Укажите корректный email");
+      return;
+    }
+    const duplicateExists = selectedReportRecipients.some(
+      (item) => String(item?.email ?? "").trim().toLowerCase() === email
+    );
+    if (duplicateExists) {
+      showSystemErrorToast("Такой email для данного отчета уже добавлен");
+      return;
+    }
+    setAddingReportRecipient(true);
+    try {
+      let response = await fetch(REPORT_TEMPLATE_RECIPIENT_ADD_API_PATH(reportTemplateId), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(toCamelApiPayload({ email }))
+      });
+      if (response.status === 404) {
+        response = await fetch(REPORT_TEMPLATES_RECIPIENT_ADD_API_PATH(reportTemplateId), {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(toCamelApiPayload({ email }))
+        });
+      }
+      const data = await response.json();
+      if (!response.ok) {
+        showSystemErrorToast(data?.error ?? "Ошибка добавления получателя отчета");
+        return;
+      }
+      const addedEmail = String(data?.item?.email ?? email).trim().toLowerCase();
+      const applyUpdate = (row) => {
+        if (String(row?.reportTemplateId ?? "").trim() !== reportTemplateId) {
+          return row;
+        }
+        const current = Array.isArray(row?.recipients) ? row.recipients : [];
+        const exists = current.some(
+          (item) => String(item?.email ?? "").trim().toLowerCase() === addedEmail
+        );
+        return exists ? row : { ...row, recipients: [...current, { email: addedEmail }] };
+      };
+      setEmployees((prev) => prev.map((row) => applyUpdate(row)));
+      setSelectedReportSnapshot((prev) => (prev ? applyUpdate(prev) : prev));
+      setIsReportRecipientAddMode(false);
+      setNewReportRecipientEmail("");
+      showSystemSuccessToast("Получатель отчета добавлен");
+    } catch {
+      showSystemErrorToast("Ошибка добавления получателя отчета");
+    } finally {
+      setAddingReportRecipient(false);
+    }
+  };
+
+  const handleDeleteReportRecipient = async (email) => {
+    if (
+      deletingReportOrganizationId ||
+      deletingReportAccessGroupCode ||
+      deletingReportRecipientEmail
+    ) {
+      return;
+    }
+    const reportTemplateId = String(selectedReportTemplateId ?? "").trim();
+    const normalizedEmail = String(email ?? "").trim().toLowerCase();
+    if (!reportTemplateId || !normalizedEmail) {
+      showSystemErrorToast("Не удалось определить получателя отчета");
+      return;
+    }
+    setDeletingReportRecipientEmail(normalizedEmail);
+    try {
+      let response = await fetch(
+        REPORT_TEMPLATE_RECIPIENT_DELETE_API_PATH(reportTemplateId, normalizedEmail),
+        { method: "DELETE" }
+      );
+      if (response.status === 404) {
+        response = await fetch(
+          REPORT_TEMPLATES_RECIPIENT_DELETE_API_PATH(reportTemplateId, normalizedEmail),
+          { method: "DELETE" }
+        );
+      }
+      const data = await response.json();
+      if (!response.ok) {
+        showSystemErrorToast(data?.error ?? "Ошибка удаления получателя отчета");
+        return;
+      }
+      const applyUpdate = (row) => {
+        if (String(row?.reportTemplateId ?? "").trim() !== reportTemplateId) {
+          return row;
+        }
+        const nextRecipients = (Array.isArray(row?.recipients) ? row.recipients : []).filter(
+          (item) => String(item?.email ?? "").trim().toLowerCase() !== normalizedEmail
+        );
+        return { ...row, recipients: nextRecipients };
+      };
+      setEmployees((prev) => prev.map((row) => applyUpdate(row)));
+      setSelectedReportSnapshot((prev) => (prev ? applyUpdate(prev) : prev));
+      showSystemSuccessToast("Получатель отчета удален");
+    } catch {
+      showSystemErrorToast("Ошибка удаления получателя отчета");
+    } finally {
+      setDeletingReportRecipientEmail("");
+    }
+  };
+
   const handleReportSqlResultsScroll = (event) => {
     if (reportSqlViewMode !== REPORT_SQL_VIEW_MODES.RESULTS) {
       return;
@@ -6855,20 +9334,6 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     if (node.scrollTop + node.clientHeight >= node.scrollHeight - 60) {
       void loadReportSqlResults({ reset: false });
     }
-  };
-
-  const formatReportSqlResultCellValue = (value) => {
-    if (value === null || value === undefined) {
-      return "";
-    }
-    if (typeof value === "object") {
-      try {
-        return JSON.stringify(value);
-      } catch {
-        return String(value);
-      }
-    }
-    return String(value);
   };
 
   const handleIncreaseReportSqlZoom = () => {
@@ -7003,17 +9468,14 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
       return;
     }
     const normalizedSql = String(reportSqlDraft ?? "").trim();
-    if (!normalizedSql) {
-      showSystemErrorToast("SQL-скрипт пустой");
-      return;
-    }
-
-    const isSqlValid = await checkReportSqlSyntax(normalizedSql, {
-      showSuccessToast: false,
-      showErrorToast: true
-    });
-    if (!isSqlValid) {
-      return;
+    if (normalizedSql) {
+      const isSqlValid = await checkReportSqlSyntax(normalizedSql, {
+        showSuccessToast: false,
+        showErrorToast: true
+      });
+      if (!isSqlValid) {
+        return;
+      }
     }
 
     try {
@@ -7122,6 +9584,10 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
   };
 
   const openCreateEmployeeCard = () => {
+    if (employeeCardCloseCleanupTimeoutRef.current) {
+      window.clearTimeout(employeeCardCloseCleanupTimeoutRef.current);
+      employeeCardCloseCleanupTimeoutRef.current = 0;
+    }
     setSelectedEmployeeSnapshot(null);
     setSelectedEmployeeId("");
     setSelectedRowIndex(-1);
@@ -7133,6 +9599,7 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     setEmployeeCardEditForm(INITIAL_EMPLOYEE_CARD_EDIT_FORM);
     setActiveEmployeeCardTab(EMPLOYEE_CARD_TABS.MAIN);
     setIsEmployeeCardEditMode(true);
+    startEmployeeCardListTransition();
     setIsEmployeeCardPanelOpen(true);
   };
 
@@ -7269,16 +9736,526 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     }
   };
 
+  const startOrganizationCardEditMode = () => {
+    if (!selectedOrganization) {
+      return;
+    }
+    setOrganizationCardEditForm(getOrganizationCardEditFormFromOrganization(selectedOrganization));
+    setIsOrganizationCardEditMode(true);
+    setActiveOrganizationEditCombo(null);
+    setOrganizationTypeEditFilter("");
+    setCountryEditFilter("");
+    setOrganizationEditComboMenuLayouts({});
+    setActiveOrganizationCardTab(ORGANIZATION_CARD_TABS.MAIN);
+  };
+
+  const cancelOrganizationCardEditMode = () => {
+    setIsOrganizationCardEditMode(false);
+    setActiveOrganizationEditCombo(null);
+    setOrganizationTypeEditFilter("");
+    setCountryEditFilter("");
+    setOrganizationEditComboMenuLayouts({});
+    setOrganizationCardEditForm(INITIAL_ORGANIZATION_CARD_EDIT_FORM);
+  };
+
+  const saveOrganizationCardMainInfo = async () => {
+    const organizationId = String(
+      selectedOrganization?.organUnitId ??
+        selectedOrganization?.organ_unit_id ??
+        selectedOrganizationId ??
+        ""
+    ).trim();
+    if (!organizationId) {
+      showSystemErrorToast("Не удалось определить organUnitId");
+      return;
+    }
+
+    const selectedTypeIds = Array.from(
+      new Set(
+        (Array.isArray(organizationCardEditForm.organUnitTypeIds)
+          ? organizationCardEditForm.organUnitTypeIds
+          : []
+        )
+          .map((item) => String(item ?? "").trim())
+          .filter(Boolean)
+      )
+    );
+
+    const payload = toCamelApiPayload({
+      sapId: String(organizationCardEditForm.sapId ?? "").trim() || null,
+      inn: String(organizationCardEditForm.inn ?? "").trim() || null,
+      kpp: String(organizationCardEditForm.kpp ?? "").trim() || null,
+      name: String(organizationCardEditForm.name ?? "").trim() || null,
+      shName: String(organizationCardEditForm.shName ?? "").trim() || null,
+      ogrn: String(organizationCardEditForm.ogrn ?? "").trim() || null,
+      okpo: String(organizationCardEditForm.okpo ?? "").trim() || null,
+      shortCode: String(organizationCardEditForm.shortCode ?? "").trim() || null,
+      signResident: String(organizationCardEditForm.signResident ?? "").trim().toUpperCase() === "ДА" ? "ДА" : "НЕТ",
+      countryId: String(organizationCardEditForm.countryId ?? "").trim() || null,
+      organUnitTypeIds: selectedTypeIds,
+      address: String(organizationCardEditForm.address ?? "").trim() || null,
+      kcehNumber: String(organizationCardEditForm.kcehNumber ?? "").trim() || null,
+      claimPrefix: String(organizationCardEditForm.claimPrefix ?? "").trim() || null,
+      fastTrack:
+        String(organizationCardEditForm.fastTrack ?? "").trim().toUpperCase() === "ДА"
+          ? "ДА"
+          : String(organizationCardEditForm.fastTrack ?? "").trim().toUpperCase() === "НЕТ"
+            ? "НЕТ"
+            : null
+    });
+
+    try {
+      const response = await fetch(ORGANIZATION_UPDATE_API_PATH(encodeURIComponent(organizationId)), {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        showSystemErrorToast(data?.error ?? "Не удалось сохранить организацию");
+        return;
+      }
+      const item = data?.item && typeof data.item === "object" ? data.item : null;
+      if (item) {
+        setSelectedOrganizationSnapshot(item);
+        setEmployees((prev) =>
+          prev.map((row) => {
+            const rowId = String(row?.organUnitId ?? row?.organ_unit_id ?? row?.id ?? "").trim();
+            return rowId === organizationId ? { ...row, ...item } : row;
+          })
+        );
+      }
+      setIsOrganizationCardEditMode(false);
+      setActiveOrganizationEditCombo(null);
+      setOrganizationTypeEditFilter("");
+      setCountryEditFilter("");
+      setOrganizationEditComboMenuLayouts({});
+      setOrganizationCardEditForm(INITIAL_ORGANIZATION_CARD_EDIT_FORM);
+      refreshEmployeesList();
+      showSystemSuccessToast("Карточка организации сохранена");
+    } catch {
+      showSystemErrorToast("Не удалось сохранить организацию");
+    }
+  };
+
+  const refreshOrganizationDadata = async (options = {}) => {
+    const suppressErrors = Boolean(options?.suppressErrors);
+    const organizationId = String(
+      selectedOrganization?.organUnitId ??
+        selectedOrganization?.organ_unit_id ??
+        selectedOrganization?.id ??
+        selectedOrganizationId ??
+        ""
+    ).trim();
+    if (!organizationId) {
+      if (!suppressErrors) {
+        showSystemErrorToast("Не удалось определить organUnitId");
+      }
+      return;
+    }
+    organizationDadataAutoRefreshAttemptedRef.current.add(organizationId);
+
+    setIsOrganizationDadataRefreshing(true);
+    try {
+      const response = await fetch(ORGANIZATION_DADATA_REFRESH_API_PATH(encodeURIComponent(organizationId)), {
+        method: "POST"
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        if (!suppressErrors) {
+          showSystemErrorToast(data?.error ?? "Не удалось обновить данные DaData");
+        }
+        return;
+      }
+      const dataInfo = data?.dataInfo && typeof data.dataInfo === "object" ? data.dataInfo : {};
+      const item = data?.item && typeof data.item === "object" ? data.item : {};
+      setSelectedOrganizationSnapshot((prev) => ({
+        ...(prev && typeof prev === "object" ? prev : {}),
+        dataInfo,
+        data_info: dataInfo,
+        ...item
+      }));
+      showSystemSuccessToast("Данные DaData обновлены");
+    } catch {
+      if (!suppressErrors) {
+        showSystemErrorToast("Не удалось обновить данные DaData");
+      }
+    } finally {
+      setIsOrganizationDadataRefreshing(false);
+    }
+  };
+  const toggleOrganizationDadataSection = useCallback((sectionKey) => {
+    setOrganizationDadataCollapsedSections((prev) => ({
+      ...prev,
+      [sectionKey]: !Boolean(prev?.[sectionKey])
+    }));
+  }, []);
+  const toggleDadataAttributeVisibility = useCallback((attributeKey) => {
+    const normalizedKey = String(attributeKey ?? "").trim();
+    if (!normalizedKey) {
+      return;
+    }
+    setDadataHiddenAttributes((prev) => {
+      const next = { ...(prev && typeof prev === "object" ? prev : {}) };
+      if (next[normalizedKey]) {
+        delete next[normalizedKey];
+      } else {
+        next[normalizedKey] = true;
+      }
+      return next;
+    });
+  }, []);
+  const handleSelectDadataRow = useCallback((section, rowKey) => {
+    const sectionKey = section === "address" ? "address" : "company";
+    const normalizedRowKey = normalizeDadataOrderKey(rowKey);
+    setSelectedDadataRowBySection((prev) => ({
+      ...(prev && typeof prev === "object" ? prev : { company: "", address: "" }),
+      [sectionKey]: normalizedRowKey
+    }));
+  }, []);
+  const stopDadataDragAutoScroll = useCallback(() => {
+    const state = dadataDragAutoScrollStateRef.current;
+    if (state.rafId) {
+      cancelAnimationFrame(state.rafId);
+    }
+    state.rafId = 0;
+    state.wrapper = null;
+    state.direction = 0;
+    state.speed = 0;
+  }, []);
+  const getDragClientY = useCallback((event) => {
+    const directClientY = Number(event?.clientY);
+    if (Number.isFinite(directClientY)) {
+      return directClientY;
+    }
+    const nativeClientY = Number(event?.nativeEvent?.clientY);
+    if (Number.isFinite(nativeClientY)) {
+      return nativeClientY;
+    }
+    const pageY = Number(event?.pageY ?? event?.nativeEvent?.pageY);
+    if (Number.isFinite(pageY)) {
+      return pageY - window.scrollY;
+    }
+    return null;
+  }, []);
+  const updateDadataDragAutoScroll = useCallback(
+    (section, clientY) => {
+      if (!Number.isFinite(clientY)) {
+        return;
+      }
+      const wrapper =
+        section === "address"
+          ? organizationDadataAddressTableWrapperRef.current
+          : organizationDadataCompanyTableWrapperRef.current;
+      if (!(wrapper instanceof HTMLElement)) {
+        return;
+      }
+      const bounds = wrapper.getBoundingClientRect();
+      const edgeThresholdPx = 128;
+      const outsideBoostDistancePx = 320;
+      let direction = 0;
+      let speed = 0;
+      if (clientY < bounds.top + edgeThresholdPx) {
+        direction = -1;
+        const outsideDistance = Math.max(0, bounds.top - clientY);
+        if (outsideDistance > 0) {
+          const outsideRatio = Math.min(1, outsideDistance / outsideBoostDistancePx);
+          speed = Math.ceil(420 + outsideRatio * 900);
+        } else {
+          const insideRatio = Math.min(
+            1,
+            Math.max(0, (bounds.top + edgeThresholdPx - clientY) / edgeThresholdPx)
+          );
+          speed = Math.ceil(140 + insideRatio * 420);
+        }
+      } else if (clientY > bounds.bottom - edgeThresholdPx) {
+        direction = 1;
+        const outsideDistance = Math.max(0, clientY - bounds.bottom);
+        if (outsideDistance > 0) {
+          const outsideRatio = Math.min(1, outsideDistance / outsideBoostDistancePx);
+          speed = Math.ceil(420 + outsideRatio * 900);
+        } else {
+          const insideRatio = Math.min(
+            1,
+            Math.max(0, (clientY - (bounds.bottom - edgeThresholdPx)) / edgeThresholdPx)
+          );
+          speed = Math.ceil(140 + insideRatio * 420);
+        }
+      }
+      speed = Math.min(1500, Math.max(0, speed));
+      const state = dadataDragAutoScrollStateRef.current;
+      state.wrapper = wrapper;
+      state.direction = direction;
+      state.speed = direction && speed > 0 ? speed : 0;
+      if (!state.direction || state.speed <= 0) {
+        if (state.rafId) {
+          cancelAnimationFrame(state.rafId);
+        }
+        state.rafId = 0;
+        return;
+      }
+      if (state.rafId) {
+        return;
+      }
+      let lastTimestamp = 0;
+      const tick = () => {
+        const activeState = dadataDragAutoScrollStateRef.current;
+        if (
+          !activeState.rafId ||
+          !(activeState.wrapper instanceof HTMLElement)
+        ) {
+          activeState.rafId = 0;
+          return;
+        }
+        if (activeState.direction && activeState.speed > 0) {
+          const now = performance.now();
+          if (!lastTimestamp) {
+            lastTimestamp = now;
+          }
+          const deltaMs = Math.min(40, Math.max(8, now - lastTimestamp));
+          lastTimestamp = now;
+          activeState.wrapper.scrollTop +=
+            activeState.direction * (activeState.speed * deltaMs) / 1000;
+        } else {
+          activeState.rafId = 0;
+          return;
+        }
+        activeState.rafId = requestAnimationFrame(tick);
+      };
+      state.rafId = requestAnimationFrame(tick);
+    },
+    []
+  );
+  const handleDadataRowDragStart = useCallback((section, rowKey, event) => {
+    const normalizedRowKey = normalizeDadataOrderKey(rowKey);
+    if (!normalizedRowKey) {
+      return;
+    }
+    dadataDraggingSectionRef.current = section === "address" ? "address" : "company";
+    setDadataDraggingRowKey(normalizedRowKey);
+    if (event?.dataTransfer) {
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", normalizedRowKey);
+    }
+    const startClientY = getDragClientY(event);
+    if (Number.isFinite(startClientY)) {
+      updateDadataDragAutoScroll(dadataDraggingSectionRef.current, startClientY);
+    }
+  }, [getDragClientY, updateDadataDragAutoScroll]);
+  const handleDadataRowDrag = useCallback(
+    (section, event) => {
+      dadataDraggingSectionRef.current = section === "address" ? "address" : "company";
+      const clientY = getDragClientY(event);
+      if (!Number.isFinite(clientY)) {
+        return;
+      }
+      updateDadataDragAutoScroll(section, clientY);
+    },
+    [getDragClientY, updateDadataDragAutoScroll]
+  );
+  const handleDadataRowDragOver = useCallback((section, event) => {
+    event.preventDefault();
+    dadataDraggingSectionRef.current = section === "address" ? "address" : "company";
+    if (event?.dataTransfer) {
+      event.dataTransfer.dropEffect = "move";
+    }
+    const clientY = getDragClientY(event);
+    if (Number.isFinite(clientY)) {
+      updateDadataDragAutoScroll(section, clientY);
+    }
+  }, [getDragClientY, updateDadataDragAutoScroll]);
+  const handleDadataRowDragEnd = useCallback(() => {
+    dadataDraggingSectionRef.current = "";
+    stopDadataDragAutoScroll();
+    setDadataDraggingRowKey("");
+  }, [stopDadataDragAutoScroll]);
+  const handleDadataRowDrop = useCallback((section, targetRowKey, visibleRows, event) => {
+    event.preventDefault();
+    dadataDraggingSectionRef.current = "";
+    stopDadataDragAutoScroll();
+    const normalizedTargetRowKey = normalizeDadataOrderKey(targetRowKey);
+    const sourceRowKey = normalizeDadataOrderKey(event?.dataTransfer?.getData("text/plain"));
+    if (!sourceRowKey || !normalizedTargetRowKey || sourceRowKey === normalizedTargetRowKey) {
+      setDadataDraggingRowKey("");
+      return;
+    }
+    const sectionKey = section === "address" ? "address" : "company";
+    const visibleRowKeys = (Array.isArray(visibleRows) ? visibleRows : [])
+      .map((row) => normalizeDadataOrderKey(row?.orderKey ?? row?.key))
+      .filter(Boolean);
+    const sourceIndex = visibleRowKeys.indexOf(sourceRowKey);
+    const targetIndex = visibleRowKeys.indexOf(normalizedTargetRowKey);
+    if (sourceIndex < 0 || targetIndex < 0) {
+      setDadataDraggingRowKey("");
+      return;
+    }
+    const reorderedVisibleKeys = [...visibleRowKeys];
+    const [movedRowKey] = reorderedVisibleKeys.splice(sourceIndex, 1);
+    if (!movedRowKey) {
+      setDadataDraggingRowKey("");
+      return;
+    }
+    reorderedVisibleKeys.splice(targetIndex, 0, movedRowKey);
+    setDadataAttributeOrderMap((prev) => {
+      const prevMap = prev && typeof prev === "object" ? prev : { company: [], address: [] };
+      const prevOrder = Array.isArray(prevMap[sectionKey])
+        ? prevMap[sectionKey].map((item) => normalizeDadataOrderKey(item)).filter(Boolean)
+        : [];
+      const remainder = prevOrder.filter((key) => !reorderedVisibleKeys.includes(key));
+      return {
+        ...prevMap,
+        [sectionKey]: [...reorderedVisibleKeys, ...remainder]
+      };
+    });
+    setDadataDraggingRowKey("");
+  }, [stopDadataDragAutoScroll]);
+  useEffect(() => () => {
+    stopDadataDragAutoScroll();
+  }, [stopDadataDragAutoScroll]);
+  useEffect(() => {
+    const handleWindowDragOver = (event) => {
+      const section = dadataDraggingSectionRef.current;
+      if (!section) {
+        return;
+      }
+      const clientY = getDragClientY(event);
+      if (!Number.isFinite(clientY)) {
+        return;
+      }
+      updateDadataDragAutoScroll(section, clientY);
+    };
+    const handleWindowDrag = (event) => {
+      const section = dadataDraggingSectionRef.current;
+      if (!section) {
+        return;
+      }
+      const clientY = getDragClientY(event);
+      if (!Number.isFinite(clientY)) {
+        return;
+      }
+      updateDadataDragAutoScroll(section, clientY);
+    };
+    window.addEventListener("dragover", handleWindowDragOver);
+    window.addEventListener("drag", handleWindowDrag);
+    return () => {
+      window.removeEventListener("dragover", handleWindowDragOver);
+      window.removeEventListener("drag", handleWindowDrag);
+    };
+  }, [getDragClientY, updateDadataDragAutoScroll]);
+  useEffect(() => {
+    if (!isOrganizationsPage || !isOrganizationCardPanelOpen) {
+      return;
+    }
+    if (!isSelectedOrganizationResident) {
+      return;
+    }
+    const organizationId = String(selectedOrganizationId ?? "").trim();
+    if (!organizationId) {
+      return;
+    }
+    const hasDadataInfo =
+      selectedOrganizationDataInfoForDisplay &&
+      typeof selectedOrganizationDataInfoForDisplay === "object" &&
+      Object.keys(selectedOrganizationDataInfoForDisplay).length > 0;
+    if (hasDadataInfo) {
+      return;
+    }
+    if (organizationDadataAutoRefreshAttemptedRef.current.has(organizationId)) {
+      return;
+    }
+    void refreshOrganizationDadata({ suppressErrors: true });
+  }, [
+    isOrganizationCardPanelOpen,
+    isOrganizationsPage,
+    isSelectedOrganizationResidentForAutoRefresh,
+    refreshOrganizationDadata,
+    selectedOrganizationDataInfoForDisplay,
+    selectedOrganizationId
+  ]);
+  useEffect(() => {
+    if (
+      activeOrganizationCardTab === ORGANIZATION_CARD_TABS.DADATA &&
+      !isSelectedOrganizationResident
+    ) {
+      setActiveOrganizationCardTab(ORGANIZATION_CARD_TABS.MAIN);
+    }
+  }, [activeOrganizationCardTab, isSelectedOrganizationResident, ORGANIZATION_CARD_TABS.DADATA, ORGANIZATION_CARD_TABS.MAIN]);
+
+  const updateOrganizationEditComboMenuLayout = useCallback((comboKey) => {
+    const inputElement = organizationEditComboInputRefs.current[comboKey];
+    if (!(inputElement instanceof HTMLElement)) {
+      return;
+    }
+    const inputRect = inputElement.getBoundingClientRect();
+    const spaceBelow = Math.max(0, window.innerHeight - inputRect.bottom - 12);
+    const spaceAbove = Math.max(0, inputRect.top - 12);
+    const preferredOptionsHeight = RELATION_COMBO_VISIBLE_OPTION_COUNT * RELATION_COMBO_OPTION_HEIGHT_PX;
+    const openUpward = spaceBelow < preferredOptionsHeight && spaceAbove > spaceBelow;
+    const availableSpace = openUpward ? spaceAbove : spaceBelow;
+    const optionsMaxHeight = Math.max(
+      RELATION_COMBO_OPTION_HEIGHT_PX * 3,
+      Math.min(preferredOptionsHeight, availableSpace - RELATION_COMBO_MENU_PADDING_PX)
+    );
+    setOrganizationEditComboMenuLayouts((prev) => ({
+      ...prev,
+      [comboKey]: {
+        optionsMaxHeight,
+        openUpward
+      }
+    }));
+  }, []);
+
+  const openOrganizationEditCombo = useCallback(
+    (comboKey) => {
+      updateOrganizationEditComboMenuLayout(comboKey);
+      if (comboKey === "types") {
+        setOrganizationTypeEditFilter("");
+      }
+      if (comboKey === "country") {
+        setCountryEditFilter("");
+      }
+      setActiveOrganizationEditCombo(comboKey);
+    },
+    [updateOrganizationEditComboMenuLayout]
+  );
+
+  const toggleOrganizationTypeInEditForm = useCallback((typeId) => {
+    const normalizedTypeId = String(typeId ?? "").trim();
+    if (!normalizedTypeId) {
+      return;
+    }
+    setOrganizationCardEditForm((prev) => {
+      const source = Array.isArray(prev.organUnitTypeIds) ? prev.organUnitTypeIds : [];
+      const set = new Set(source.map((item) => String(item ?? "").trim()).filter(Boolean));
+      if (set.has(normalizedTypeId)) {
+        set.delete(normalizedTypeId);
+      } else {
+        set.add(normalizedTypeId);
+      }
+      return {
+        ...prev,
+        organUnitTypeIds: Array.from(set)
+      };
+    });
+  }, []);
+
   const goToPage = () => {
-    const parsed = Number.parseInt(String(pageJumpInput).trim(), 10);
+    const rawValue = pageJumpInputRef.current ? String(pageJumpInputRef.current.value ?? "").trim() : "";
+    const parsed = Number.parseInt(rawValue, 10);
     if (!Number.isFinite(parsed)) {
-      setPageJumpInput(String(currentPage));
+      if (pageJumpInputRef.current) {
+        pageJumpInputRef.current.value = String(currentPage);
+      }
       return;
     }
 
     const clamped = Math.min(Math.max(parsed, 1), totalPages);
     setCurrentPage(clamped);
-    setPageJumpInput(String(clamped));
+    if (pageJumpInputRef.current) {
+      pageJumpInputRef.current.value = String(clamped);
+    }
   };
 
   const updateCellTooltipPosition = (event) => {
@@ -8314,6 +11291,35 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
       document.removeEventListener("mousedown", handleMouseDown);
     };
   }, [isPositionFormActive]);
+  useEffect(() => {
+    if (!isOrganizationCardEditMode) {
+      return;
+    }
+    const handleMouseDown = (event) => {
+      if (event.target instanceof Element && event.target.closest(".relation-combobox")) {
+        return;
+      }
+      setActiveOrganizationEditCombo(null);
+    };
+    document.addEventListener("mousedown", handleMouseDown);
+    return () => {
+      document.removeEventListener("mousedown", handleMouseDown);
+    };
+  }, [isOrganizationCardEditMode]);
+  useEffect(() => {
+    if (!isOrganizationCardEditMode || !activeOrganizationEditCombo) {
+      return;
+    }
+    const handleViewportChange = () => {
+      updateOrganizationEditComboMenuLayout(activeOrganizationEditCombo);
+    };
+    window.addEventListener("resize", handleViewportChange);
+    window.addEventListener("scroll", handleViewportChange, true);
+    return () => {
+      window.removeEventListener("resize", handleViewportChange);
+      window.removeEventListener("scroll", handleViewportChange, true);
+    };
+  }, [activeOrganizationEditCombo, isOrganizationCardEditMode, updateOrganizationEditComboMenuLayout]);
 
   const updateRelationComboMenuLayout = (comboKey) => {
     const inputElement = relationComboInputRefs.current[comboKey];
@@ -9228,6 +12234,28 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     setPendingEmployeeDelete(null);
   };
 
+  const openDeleteOrganizationModal = () => {
+    const organUnitId = String(
+      selectedOrganization?.id ??
+        selectedOrganization?.organUnitId ??
+        selectedOrganizationId ??
+        ""
+    ).trim();
+    if (!organUnitId) {
+      const errorMessage = "Не удалось определить organUnitId для удаления";
+      showSystemErrorToast(errorMessage);
+      return;
+    }
+    setPendingOrganizationDelete({
+      organUnitId,
+      name: String(selectedOrganization?.name ?? "").trim()
+    });
+  };
+
+  const closeDeleteOrganizationModal = () => {
+    setPendingOrganizationDelete(null);
+  };
+
   const confirmDeleteRelation = async () => {
     if (!pendingRelationDelete?.relationId) {
       return;
@@ -9334,8 +12362,60 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
     }
   };
 
-  const getRelationColumnWidthPx = (columnKey) =>
-    Number(employeeRelationsColumnWidths[columnKey] ?? DEFAULT_RELATION_COLUMN_WIDTHS[columnKey] ?? MIN_COLUMN_WIDTH);
+  const confirmDeleteOrganization = async () => {
+    if (!pendingOrganizationDelete?.organUnitId) {
+      return;
+    }
+    const deleteRequest = pendingOrganizationDelete;
+    setPendingOrganizationDelete(null);
+
+    try {
+      const response = await fetch(
+        `${ADMIN_API_BASE_URL}/organization/${deleteRequest.organUnitId}`,
+        { method: "DELETE" }
+      );
+      const responseText = await response.text();
+      let data = null;
+      if (responseText) {
+        try {
+          data = JSON.parse(responseText);
+        } catch {
+          data = null;
+        }
+      }
+      if (!response.ok) {
+        const errorMessage =
+          String(data?.error ?? "").trim() ||
+          String(responseText ?? "").trim() ||
+          `Не удалось удалить организацию (HTTP ${response.status})`;
+        showSystemErrorToast(errorMessage);
+        return;
+      }
+
+      setEmployees((prev) =>
+        prev.filter(
+          (row) =>
+            String(row?.id ?? row?.organUnitId ?? "").trim() !== deleteRequest.organUnitId
+        )
+      );
+      setTotalCount((prev) => Math.max(0, Number(prev ?? 0) - 1));
+      refreshEmployeesList();
+      handleCloseOrganizationCardPanel();
+    } catch (error) {
+      const errorMessage = String(error?.message ?? "").trim();
+      showSystemErrorToast(errorMessage || "Не удалось удалить организацию");
+    }
+  };
+
+  const getRelationColumnWidthPx = (columnKey) => {
+    const rawWidth = Number(
+      employeeRelationsColumnWidths[columnKey] ?? DEFAULT_RELATION_COLUMN_WIDTHS[columnKey] ?? MIN_COLUMN_WIDTH
+    );
+    if (!Number.isFinite(rawWidth)) {
+      return MIN_COLUMN_WIDTH;
+    }
+    return Math.max(MIN_COLUMN_WIDTH, Math.round(rawWidth));
+  };
   const relationTableWidthPx =
     RELATION_COLUMNS.reduce((sum, column) => sum + getRelationColumnWidthPx(column.key), 0) + 96;
 
@@ -9384,7 +12464,7 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
       return;
     }
 
-    const targetTotalWidth = wrapper.clientWidth - 96;
+    const targetTotalWidth = wrapper.clientWidth - 96 - 2;
     if (targetTotalWidth <= 0) {
       return;
     }
@@ -9438,6 +12518,22 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
               </svg>
             </span>
             {!isSidebarCollapsed && <span>Администрирование</span>}
+          </button>
+          <button
+            type="button"
+            className={`sidebar-button sidebar-action${isSidebarCollapsed ? " icon-only" : ""}${
+              isPrintFormsPage ? " active" : ""
+            }`}
+            onClick={() => handlePageSelect(PAGE_IDS.PRINT_FORMS)}
+            aria-label="Шаблоны печатных форм"
+            title="Шаблоны печатных форм"
+          >
+            <span className="sidebar-action-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" focusable="false">
+                <path d="M6 2h9l5 5v15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm8 1.5V8h4.5L14 3.5zM8 12h8v1.5H8V12zm0 4h8v1.5H8V16z" />
+              </svg>
+            </span>
+            {!isSidebarCollapsed && <span>Печатные формы</span>}
           </button>
         </div>
         <div className="sidebar-bottom">
@@ -9573,20 +12669,105 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
         </div>
       )}
       <section className={`content-area${isDarkThemeEnabled ? " dark" : ""}`}>
-        <header className="page-header">
+        <header
+          className={`page-header${
+            isReportHeaderContext || isEmployeeOrganizationHeaderContext ? " report-settings-page-header" : ""
+          }`}
+        >
           <h1>{currentPageTitle}</h1>
-          <div className="header-time-block" aria-label="Текущие дата и время">
-            <div className="header-time-value">{nowDisplay.time}</div>
-            <div className="header-date-value">{nowDisplay.date}</div>
+          <div className="page-header-right">
+            <div className="header-time-block" aria-label="Текущие дата и время">
+              <div className="header-date-value">{nowDisplay.date}</div>
+              <div className="header-weekday-value">
+                {String(nowDisplay.weekday ?? "").trim() || formatNow().weekday}
+              </div>
+              <div className="header-time-value">{nowDisplay.time}</div>
+            </div>
+            {(isReportHeaderContext || isEmployeeOrganizationHeaderContext) && (
+              <div className="report-list-header-actions">
+                {isReportSettingsPage && (
+                  <button type="button" className="panel-action-button" onClick={openCreateReportCard}>
+                    <span aria-hidden="true">+</span>
+                    <span>Добавить</span>
+                  </button>
+                )}
+                {isEmployeesHeaderContext && (
+                  <button type="button" className="panel-action-button" onClick={openCreateEmployeeCard}>
+                    <span aria-hidden="true">+</span>
+                    <span>Добавить</span>
+                  </button>
+                )}
+                {isEmployeesHeaderContext && (
+                  <label className="panel-action-button upload-action-button">
+                    <span aria-hidden="true">↑</span>
+                    <span>{loading ? "Загрузка..." : "Загрузить"}</span>
+                    <input
+                      type="file"
+                      accept=".xlsx"
+                      onChange={handleFileSelect}
+                      disabled={loading}
+                      hidden
+                    />
+                  </label>
+                )}
+                {isEmployeeOrganizationHeaderContext && (
+                  <ExportToExcelButton
+                    exportFile={requestExportFile}
+                    disabled={employeesLoading}
+                    className="panel-action-button"
+                    onError={(error) =>
+                      setEmployeesError(error instanceof Error ? error.message : "Ошибка выгрузки")
+                    }
+                  />
+                )}
+                <button
+                  type="button"
+                  className="panel-action-button"
+                  onClick={() => {
+                    setFilters(initialFiltersForPage);
+                    setCurrentPage(1);
+                  }}
+                >
+                  <span aria-hidden="true">✕</span>
+                  <span>Удалить фильтр</span>
+                </button>
+                {isEmployeeOrganizationHeaderContext || isReportSettingsPage ? (
+                  <button type="button" className="panel-action-button" onClick={handleAlignVisibleColumns}>
+                    <span aria-hidden="true">↔</span>
+                    <span>Выровнять</span>
+                  </button>
+                ) : null}
+                {isEmployeeOrganizationHeaderContext || isReportSettingsPage ? (
+                  <button type="button" className="panel-action-button" onClick={openColumnSettings}>
+                    <span aria-hidden="true">⚙</span>
+                    <span>Настройка</span>
+                  </button>
+                ) : null}
+              </div>
+            )}
           </div>
         </header>
-        <section className="main-panel" ref={mainPanelRef}>
+        <section
+          className={`main-panel${
+            isReportHeaderContext || isEmployeeOrganizationHeaderContext ? " report-settings-main-panel" : ""
+          }`}
+          ref={mainPanelRef}
+        >
           {isListPage ? (
             <>
-              <div className={`list-content-layout${isSideCardVisible ? " split-view" : ""}`}>
+              <div
+                className={`list-content-layout${isSideCardVisible ? " split-view" : ""}${
+                  isReportHeaderContext || isEmployeeOrganizationHeaderContext ? " report-settings-layout" : ""
+                }`}
+              >
                 <div className="list-content-main">
-                  <div className="main-panel-toolbar">
-                    <div className="main-panel-actions">
+                  {!isReportSettingsPage &&
+                    !isEmployeeOrganizationPage &&
+                    !isEmployeeCardPanelOpen &&
+                    !isOrganizationCardPanelOpen &&
+                    !isReportCardPanelOpen && (
+                    <div className="main-panel-toolbar">
+                      <div className="main-panel-actions">
                       {isEmployeesPage && !isSideCardVisible && (
                         <button type="button" className="panel-action-button" onClick={openCreateEmployeeCard}>
                           <span aria-hidden="true">+</span>
@@ -9599,12 +12780,6 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                           className="panel-action-button"
                           onClick={handleOpenRelationCreateFromList}
                         >
-                          <span aria-hidden="true">+</span>
-                          <span>Добавить</span>
-                        </button>
-                      )}
-                      {isReportSettingsPage && !isSideCardVisible && (
-                        <button type="button" className="panel-action-button" onClick={openCreateReportCard}>
                           <span aria-hidden="true">+</span>
                           <span>Добавить</span>
                         </button>
@@ -9638,31 +12813,34 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                           }
                         />
                       )}
-                      <button
-                        type="button"
-                        className="panel-action-button"
-                        onClick={() => {
-                          setFilters(initialFiltersForPage);
-                          setCurrentPage(1);
-                        }}
-                      >
-                        <span aria-hidden="true">✕</span>
-                        <span>Удалить фильтр</span>
-                      </button>
-                      {!isSideCardVisible && (
+                      {!isReportSettingsPage && (
+                        <button
+                          type="button"
+                          className="panel-action-button"
+                          onClick={() => {
+                            setFilters(initialFiltersForPage);
+                            setCurrentPage(1);
+                          }}
+                        >
+                          <span aria-hidden="true">✕</span>
+                          <span>Удалить фильтр</span>
+                        </button>
+                      )}
+                      {!isSideCardVisible && !isReportSettingsPage && (
                         <button type="button" className="panel-action-button" onClick={handleAlignVisibleColumns}>
                           <span aria-hidden="true">↔</span>
                           <span>Выровнять</span>
                         </button>
                       )}
-                      {!isSideCardVisible && (
+                      {!isSideCardVisible && !isReportSettingsPage && (
                         <button type="button" className="panel-action-button" onClick={openColumnSettings}>
                           <span aria-hidden="true">⚙</span>
                           <span>Настройка</span>
                         </button>
                       )}
+                      </div>
                     </div>
-                  </div>
+                  )}
                   <div className="table-wrapper" ref={tableWrapperRef} tabIndex={0}>
                     <table
                       className="employee-grid"
@@ -9783,6 +12961,72 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                           <option value="ДА">ДА</option>
                           <option value="НЕТ">НЕТ</option>
                         </select>
+                      ) : isOrganizationsPage && column.key === "organUnitTypeNames" ? (
+                        <div
+                          className={`relation-combobox organization-type-filter-combobox${
+                            isOrganizationTypeFilterOpen ? " open" : ""
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            className="column-filter-input relation-combobox-trigger organization-type-filter-trigger"
+                            onClick={() => setIsOrganizationTypeFilterOpen((prev) => !prev)}
+                          >
+                            <span className="organization-type-filter-trigger-label">
+                              {organizationTypeFilterTitle}
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            className={`organization-type-filter-close-button${
+                              selectedOrganizationTypeNames.length > 0 ? " with-clear" : ""
+                            }`}
+                            aria-label={
+                              isOrganizationTypeFilterOpen
+                                ? "Закрыть список фильтра"
+                                : "Открыть список фильтра"
+                            }
+                            onClick={() => setIsOrganizationTypeFilterOpen((prev) => !prev)}
+                          >
+                            {isOrganizationTypeFilterOpen ? "▴" : "▾"}
+                          </button>
+                          {selectedOrganizationTypeNames.length > 0 && (
+                            <button
+                              type="button"
+                              className="relation-combobox-clear-button organization-type-filter-clear-button"
+                              aria-label="Очистить фильтр"
+                              onClick={() => handleFilterChange("organUnitTypeNames", [])}
+                            >
+                              ×
+                            </button>
+                          )}
+                          {isOrganizationTypeFilterOpen && (
+                            <div className="relation-combobox-menu organization-type-filter-menu">
+                              <div className="relation-combobox-options organization-type-filter-options">
+                                {organizationUnitTypeOptions.length === 0 ? (
+                                  <div className="relation-combobox-empty">Нет данных</div>
+                                ) : (
+                                  organizationUnitTypeOptions.map((name) => {
+                                    const checked = selectedOrganizationTypeNames.includes(name);
+                                    return (
+                                      <label
+                                        key={name}
+                                        className="organization-type-filter-option"
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={checked}
+                                          onChange={() => toggleOrganizationTypeFilterValue(name)}
+                                        />
+                                        <span>{name}</span>
+                                      </label>
+                                    );
+                                  })
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       ) : isEmployeeRelationsPage && column.key === "defaultFlag" ? (
                         <select
                           value={filters.defaultFlag}
@@ -9819,14 +13063,14 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                 </tr>
               </thead>
               <tbody>
-                {employeesLoading && employees.length === 0 && (
+                {employeesLoading && displayedEmployees.length === 0 && (
                   <tr>
                     <td colSpan={visibleColumns.length + (isEmployeeRelationsPage ? 1 : 0)}>
                       Загрузка данных...
                     </td>
                   </tr>
                 )}
-                {!employeesLoading && !employeesError && employees.length === 0 && (
+                {!employeesLoading && !employeesError && displayedEmployees.length === 0 && (
                   <tr>
                     <td colSpan={visibleColumns.length + (isEmployeeRelationsPage ? 1 : 0)}>
                       Записи не найдены
@@ -9838,11 +13082,106 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                   isAddingEmployeeRelation &&
                   renderEmployeeRelationFormRow("Отменить добавление связи", "relations-list-add-row")}
                 {!employeesError &&
-                  employees.map((row, rowIndex) => {
+                  isOrganizationsPage &&
+                  displayedEmployees.map((row, rowIndex) => (
+                    <tr
+                      key={`${
+                        row.id ??
+                        row.reportTemplateId ??
+                        row.employeeId ??
+                        row.relationId ??
+                        row.email ??
+                        row.sapId ??
+                        "row"
+                      }-${rowIndex}`}
+                      data-row-index={rowIndex}
+                      tabIndex={-1}
+                      aria-selected={false}
+                      onMouseDown={(event) => {
+                        if (event.button !== 0) {
+                          return;
+                        }
+                        const table = event.currentTarget.closest("table");
+                        if (table) {
+                          table
+                            .querySelectorAll("tr.selected-row")
+                            .forEach((rowElement) => rowElement.classList.remove("selected-row"));
+                        } else if (selectedOrganizationRowRef.current) {
+                          selectedOrganizationRowRef.current.classList.remove("selected-row");
+                        }
+                        event.currentTarget.classList.add("selected-row");
+                        selectedOrganizationRowRef.current = event.currentTarget;
+                      }}
+                      onClick={() => {
+                        handleOrganizationRowClick(rowIndex);
+                      }}
+                    >
+                      {visibleColumns.map((column) => {
+                        const displayValue =
+                          column.key === "organUnitTypeNames"
+                            ? (() => {
+                                const sourceTypes = Array.isArray(row?.organUnitTypes)
+                                  ? row.organUnitTypes
+                                  : Array.isArray(row?.organ_unit_types)
+                                    ? row.organ_unit_types
+                                    : [];
+                                const sortedTypes = sourceTypes
+                                  .map((item) => ({
+                                    name: String(item?.organUnitTypeName ?? item?.organ_unit_type_name ?? "").trim(),
+                                    sortOrder: Number(
+                                      item?.organUnitTypeSort ??
+                                        item?.organ_unit_type_sort ??
+                                        Number.MAX_SAFE_INTEGER
+                                    )
+                                  }))
+                                  .filter((item) => item.name)
+                                  .sort((left, right) => {
+                                    if (left.sortOrder !== right.sortOrder) {
+                                      return left.sortOrder - right.sortOrder;
+                                    }
+                                    return left.name.localeCompare(right.name, "ru-RU", {
+                                      sensitivity: "base",
+                                      numeric: true
+                                    });
+                                  });
+                                const names = sortedTypes.map((item) => item.name);
+                                return names.length > 0 ? names.join(", ") : "-";
+                              })()
+                            : row?.[column.key] ?? "-";
+                        return (
+                          <td
+                            key={`${
+                              row.id ??
+                              row.reportTemplateId ??
+                              row.employeeId ??
+                              row.relationId ??
+                              row.email ??
+                              row.sapId ??
+                              rowIndex
+                            }-${column.key}`}
+                            className={`${getStickyProps(column.key).className}${
+                              column.key === "signResident" ? " cell-center" : ""
+                            }`.trim()}
+                            style={getStickyProps(column.key).style}
+                            onMouseEnter={(event) => handleCellMouseEnter(event, displayValue)}
+                            onMouseMove={updateCellTooltipPosition}
+                            onMouseLeave={handleCellMouseLeave}
+                          >
+                            {displayValue}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                {!employeesError &&
+                  !isOrganizationsPage &&
+                  displayedEmployees.map((row, rowIndex) => {
                     const rowEmployeeId = String(row?.id ?? row?.employeeId ?? "").trim();
                     const isRowSelected = isEmployeesPage
                       ? rowEmployeeId !== "" && rowEmployeeId === selectedEmployeeId
-                      : selectedRowIndex === rowIndex;
+                      : isOrganizationsPage
+                        ? false
+                        : selectedRowIndex === rowIndex;
                     if (isEmployeeRelationsPage && getRelationId(row) === editingEmployeeRelationId) {
                       return renderEmployeeRelationFormRow(
                         "Отменить редактирование связи",
@@ -9864,9 +13203,26 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                       tabIndex={-1}
                       aria-selected={isRowSelected}
                       className={isRowSelected ? "selected-row" : ""}
+                      onMouseDown={(event) => {
+                        if (isOrganizationsPage && event.button === 0) {
+                          const table = event.currentTarget.closest("table");
+                          if (table) {
+                            table
+                              .querySelectorAll("tr.selected-row")
+                              .forEach((rowElement) => rowElement.classList.remove("selected-row"));
+                          } else if (selectedOrganizationRowRef.current) {
+                            selectedOrganizationRowRef.current.classList.remove("selected-row");
+                          }
+                          event.currentTarget.classList.add("selected-row");
+                          selectedOrganizationRowRef.current = event.currentTarget;
+                        }
+                      }}
                       onClick={() => {
                         if (isEmployeesPage) {
                           handleEmployeeRowClick(rowIndex);
+                        } else if (isOrganizationsPage) {
+                          // Выбор уже выполнен в onMouseDown для мгновенного отклика.
+                          return;
                         } else if (isReportSettingsPage) {
                           handleReportRowClick(rowIndex);
                         } else {
@@ -9937,13 +13293,30 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                               : ""
                           }`.trim()}
                           style={getStickyProps(column.key).style}
-                          onMouseEnter={(event) =>
-                            handleCellMouseEnter(event, displayValue, fixedTooltipText)
+                          onMouseEnter={
+                            isMainGridCellTooltipEnabled
+                              ? (event) => handleCellMouseEnter(event, displayValue, fixedTooltipText)
+                              : undefined
                           }
-                          onMouseMove={updateCellTooltipPosition}
-                          onMouseLeave={handleCellMouseLeave}
+                          onMouseMove={isMainGridCellTooltipEnabled ? updateCellTooltipPosition : undefined}
+                          onMouseLeave={isMainGridCellTooltipEnabled ? handleCellMouseLeave : undefined}
                         >
-                          {isEmployeeRelationsPage &&
+                          {isEmployeesPage &&
+                          column.key === "organName" &&
+                          normalizeOrganizationId(derivedPositionData?.organUnitId) ? (
+                            <a
+                              className="log-link employee-name-link"
+                              href={buildOrganizationCardUrl(derivedPositionData?.organUnitId)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                              }}
+                              title="Открыть карточку организации в новой вкладке"
+                            >
+                              {displayValue}
+                            </a>
+                          ) : isEmployeeRelationsPage &&
                           column.key === "employeeName" &&
                           normalizeEmployeeId(row?.employeeId) ? (
                             <a
@@ -9955,6 +13328,21 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                                 event.stopPropagation();
                               }}
                               title="Открыть карточку сотрудника в новой вкладке"
+                            >
+                              {displayValue}
+                            </a>
+                          ) : isEmployeeRelationsPage &&
+                            column.key === "organName" &&
+                            normalizeOrganizationId(row?.organUnitId ?? row?.organ_unit_id) ? (
+                            <a
+                              className="log-link employee-name-link"
+                              href={buildOrganizationCardUrl(row?.organUnitId ?? row?.organ_unit_id)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                              }}
+                              title="Открыть карточку организации в новой вкладке"
                             >
                               {displayValue}
                             </a>
@@ -9995,7 +13383,7 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                   </div>
                 </div>
                 {isEmployeesPage && (
-                  <aside className={`employee-card-panel${isEmployeeCardVisible ? " open" : ""}`}>
+                  <aside className={`employee-card-panel report-card-panel${isEmployeeCardVisible ? " open" : ""}`}>
                     <div className="employee-card-panel-header">
                       <h2>Карточка сотрудника</h2>
                       <div className="employee-card-full-name employee-card-full-name-header">
@@ -10323,7 +13711,22 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                                           onMouseMove={updateCellTooltipPosition}
                                           onMouseLeave={handleCellMouseLeave}
                                         >
-                                          {positionRow?.organName ?? "-"}
+                                          {normalizeOrganizationId(positionRow?.organUnitId) ? (
+                                            <a
+                                              className="log-link employee-name-link"
+                                              href={buildOrganizationCardUrl(positionRow?.organUnitId)}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              onClick={(event) => {
+                                                event.stopPropagation();
+                                              }}
+                                              title="Открыть карточку организации в новой вкладке"
+                                            >
+                                              {positionRow?.organName ?? "-"}
+                                            </a>
+                                          ) : (
+                                            positionRow?.organName ?? "-"
+                                          )}
                                         </td>
                                         <td
                                           onMouseEnter={(event) =>
@@ -10421,8 +13824,7 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                                 className="employee-card-relations-table"
                                 style={{
                                   width: `${relationTableWidthPx}px`,
-                                  minWidth: `${relationTableWidthPx}px`,
-                                  maxWidth: `${relationTableWidthPx}px`
+                                  minWidth: `${relationTableWidthPx}px`
                                 }}
                               >
                                 <colgroup>
@@ -10431,12 +13833,11 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                                       key={`relation-col-${column.key}`}
                                       style={{
                                         width: `${getRelationColumnWidthPx(column.key)}px`,
-                                        minWidth: `${getRelationColumnWidthPx(column.key)}px`,
-                                        maxWidth: `${getRelationColumnWidthPx(column.key)}px`
+                                        minWidth: `${getRelationColumnWidthPx(column.key)}px`
                                       }}
                                     />
                                   ))}
-                                  <col style={{ width: "96px", minWidth: "96px", maxWidth: "96px" }} />
+                                  <col style={{ width: "96px", minWidth: "96px" }} />
                                 </colgroup>
                                 <thead>
                                   <tr>
@@ -10583,7 +13984,22 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                                           onMouseMove={updateCellTooltipPosition}
                                           onMouseLeave={handleCellMouseLeave}
                                         >
-                                          {relationRow?.organName ?? "-"}
+                                          {normalizeOrganizationId(relationRow?.organUnitId) ? (
+                                            <a
+                                              className="log-link employee-name-link"
+                                              href={buildOrganizationCardUrl(relationRow?.organUnitId)}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              onClick={(event) => {
+                                                event.stopPropagation();
+                                              }}
+                                              title="Открыть карточку организации в новой вкладке"
+                                            >
+                                              {relationRow?.organName ?? "-"}
+                                            </a>
+                                          ) : (
+                                            relationRow?.organName ?? "-"
+                                          )}
                                         </td>
                                         <td
                                           onMouseEnter={(event) =>
@@ -10650,8 +14066,852 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                     </div>
                   </aside>
                 )}
+                {isOrganizationsPage && (
+                  <aside className={`employee-card-panel report-card-panel${isOrganizationCardVisible ? " open" : ""}`}>
+                    <div className="employee-card-panel-header">
+                      <h2>Карточка организации</h2>
+                      <div className="employee-card-full-name employee-card-full-name-header">
+                        {String(
+                          selectedOrganization?.shName ??
+                            selectedOrganization?.sh_name ??
+                            selectedOrganization?.name ??
+                            "-"
+                        ).trim() || "-"}
+                      </div>
+                      <button
+                        type="button"
+                        className="employee-card-close-button"
+                        onClick={handleCloseOrganizationCardPanel}
+                        aria-label="Закрыть карточку организации"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <div className="employee-card-panel-body">
+                      <div className="employee-card-tabs" role="tablist" aria-label="Вкладки карточки организации">
+                        <button
+                          type="button"
+                          className={`employee-card-tab${
+                            activeOrganizationCardTab === ORGANIZATION_CARD_TABS.MAIN ? " active" : ""
+                          }`}
+                          onClick={() => setActiveOrganizationCardTab(ORGANIZATION_CARD_TABS.MAIN)}
+                          aria-selected={activeOrganizationCardTab === ORGANIZATION_CARD_TABS.MAIN}
+                          role="tab"
+                        >
+                          Основная информация
+                        </button>
+                        {isSelectedOrganizationResident && (
+                          <button
+                            type="button"
+                            className={`employee-card-tab${
+                              activeOrganizationCardTab === ORGANIZATION_CARD_TABS.DADATA ? " active" : ""
+                            }`}
+                            onClick={() => setActiveOrganizationCardTab(ORGANIZATION_CARD_TABS.DADATA)}
+                            aria-selected={activeOrganizationCardTab === ORGANIZATION_CARD_TABS.DADATA}
+                            role="tab"
+                          >
+                            ДаДата
+                          </button>
+                        )}
+                      </div>
+                      {activeOrganizationCardTab === ORGANIZATION_CARD_TABS.MAIN && (
+                        <div
+                          className={`employee-card-main-tab-content organization-card-main-tab-content${
+                            isOrganizationCardEditMode ? " employee-card-main-tab-content-edit-mode" : ""
+                          }`}
+                        >
+                        <section className="employee-card-section">
+                          <div className="employee-card-section-header">
+                            <h3>Основная информация</h3>
+                            <div className="employee-card-section-actions">
+                              {isOrganizationCardEditMode ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="panel-action-button"
+                                    onClick={saveOrganizationCardMainInfo}
+                                  >
+                                    Сохранить
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="panel-action-button"
+                                    onClick={cancelOrganizationCardEditMode}
+                                  >
+                                    Отменить
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="panel-action-button"
+                                    onClick={startOrganizationCardEditMode}
+                                  >
+                                    Изменить
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="panel-action-button"
+                                    onClick={openDeleteOrganizationModal}
+                                  >
+                                    Удалить
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          <div className="employee-card-params">
+                            <div className="employee-card-params-row">
+                              <div className="employee-card-param">
+                                <span className="employee-card-field-label">sap id</span>
+                                {isOrganizationCardEditMode ? (
+                                  renderEmployeeCardTextInput({
+                                    value: organizationCardEditForm.sapId,
+                                    onChange: (value) =>
+                                      setOrganizationCardEditForm((prev) => ({
+                                        ...prev,
+                                        sapId: value
+                                      }))
+                                  })
+                                ) : (
+                                  <span className="employee-card-field-value employee-card-field-value-block">
+                                    {selectedOrganization?.sapId ?? selectedOrganization?.sap_id ?? "-"}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="employee-card-param">
+                                <span className="employee-card-field-label">ИНН</span>
+                                {isOrganizationCardEditMode ? (
+                                  renderEmployeeCardTextInput({
+                                    value: organizationCardEditForm.inn,
+                                    onChange: (value) =>
+                                      setOrganizationCardEditForm((prev) => ({
+                                        ...prev,
+                                        inn: value
+                                      }))
+                                  })
+                                ) : (
+                                  <span
+                                    className={`employee-card-field-value employee-card-field-value-block${
+                                      organizationMainIndicatorsMismatch.inn
+                                        ? " employee-card-field-value-mismatch"
+                                        : ""
+                                    }`}
+                                  >
+                                    {selectedOrganization?.inn ?? "-"}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="employee-card-param">
+                                <span className="employee-card-field-label">КПП</span>
+                                {isOrganizationCardEditMode ? (
+                                  renderEmployeeCardTextInput({
+                                    value: organizationCardEditForm.kpp,
+                                    onChange: (value) =>
+                                      setOrganizationCardEditForm((prev) => ({
+                                        ...prev,
+                                        kpp: value
+                                      }))
+                                  })
+                                ) : (
+                                  <span
+                                    className={`employee-card-field-value employee-card-field-value-block${
+                                      organizationMainIndicatorsMismatch.kpp
+                                        ? " employee-card-field-value-mismatch"
+                                        : ""
+                                    }`}
+                                  >
+                                    {selectedOrganization?.kpp ?? "-"}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="employee-card-params-row">
+                              <div className="employee-card-param employee-card-param-span-two">
+                                <span className="employee-card-field-label">Наименование</span>
+                                {isOrganizationCardEditMode ? (
+                                  renderEmployeeCardTextInput({
+                                    value: organizationCardEditForm.name,
+                                    onChange: (value) =>
+                                      setOrganizationCardEditForm((prev) => ({
+                                        ...prev,
+                                        name: value
+                                      }))
+                                  })
+                                ) : (
+                                  <span className="employee-card-field-value employee-card-field-value-block">
+                                    {selectedOrganization?.name ?? "-"}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="employee-card-param">
+                                <span className="employee-card-field-label">Краткое наименование</span>
+                                {isOrganizationCardEditMode ? (
+                                  renderEmployeeCardTextInput({
+                                    value: organizationCardEditForm.shName,
+                                    onChange: (value) =>
+                                      setOrganizationCardEditForm((prev) => ({
+                                        ...prev,
+                                        shName: value
+                                      }))
+                                  })
+                                ) : (
+                                  <span className="employee-card-field-value employee-card-field-value-block">
+                                    {selectedOrganization?.shName ?? selectedOrganization?.sh_name ?? "-"}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="employee-card-params-row">
+                              <div className="employee-card-param">
+                                <span className="employee-card-field-label">ОГРН</span>
+                                {isOrganizationCardEditMode ? (
+                                  renderEmployeeCardTextInput({
+                                    value: organizationCardEditForm.ogrn,
+                                    onChange: (value) =>
+                                      setOrganizationCardEditForm((prev) => ({
+                                        ...prev,
+                                        ogrn: value
+                                      }))
+                                  })
+                                ) : (
+                                  <span
+                                    className={`employee-card-field-value employee-card-field-value-block${
+                                      organizationMainIndicatorsMismatch.ogrn
+                                        ? " employee-card-field-value-mismatch"
+                                        : ""
+                                    }`}
+                                  >
+                                    {selectedOrganization?.ogrn ?? "-"}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="employee-card-param">
+                                <span className="employee-card-field-label">ОКПО</span>
+                                {isOrganizationCardEditMode ? (
+                                  renderEmployeeCardTextInput({
+                                    value: organizationCardEditForm.okpo,
+                                    onChange: (value) =>
+                                      setOrganizationCardEditForm((prev) => ({
+                                        ...prev,
+                                        okpo: value
+                                      }))
+                                  })
+                                ) : (
+                                  <span className="employee-card-field-value employee-card-field-value-block">
+                                    {selectedOrganization?.okpo ?? "-"}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="employee-card-param">
+                                <span className="employee-card-field-label">Краткий код</span>
+                                {isOrganizationCardEditMode ? (
+                                  renderEmployeeCardTextInput({
+                                    value: organizationCardEditForm.shortCode,
+                                    onChange: (value) =>
+                                      setOrganizationCardEditForm((prev) => ({
+                                        ...prev,
+                                        shortCode: value
+                                      }))
+                                  })
+                                ) : (
+                                  <span className="employee-card-field-value employee-card-field-value-block">
+                                    {selectedOrganization?.shortCode ?? selectedOrganization?.short_code ?? "-"}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="employee-card-params-row">
+                              <div className="employee-card-param">
+                                <span className="employee-card-field-label">Тип организации</span>
+                                {isOrganizationCardEditMode ? (
+                                  <div
+                                    className={`relation-combobox organization-type-edit-combobox${
+                                      activeOrganizationEditCombo === "types" ? " open" : ""
+                                    }`}
+                                  >
+                                    <input
+                                      type="text"
+                                      className="employee-card-field-input relation-combobox-trigger organization-type-edit-trigger"
+                                      ref={(element) => {
+                                        organizationEditComboInputRefs.current.types = element;
+                                      }}
+                                      value={
+                                        activeOrganizationEditCombo === "types"
+                                          ? organizationTypeEditFilter
+                                          : selectedOrganizationTypeSummaryForEdit
+                                      }
+                                      onFocus={() => openOrganizationEditCombo("types")}
+                                      onClick={() => openOrganizationEditCombo("types")}
+                                      onChange={(event) => {
+                                        if (activeOrganizationEditCombo !== "types") {
+                                          openOrganizationEditCombo("types");
+                                        }
+                                        setOrganizationTypeEditFilter(String(event.target.value ?? ""));
+                                      }}
+                                      placeholder="Выберите тип организации"
+                                    />
+                                    <button
+                                      type="button"
+                                      className={`organization-type-edit-toggle-button${
+                                        selectedOrganizationTypeSummaryForEdit ? " with-clear" : ""
+                                      }`}
+                                      aria-label={
+                                        activeOrganizationEditCombo === "types"
+                                          ? "Закрыть список типов организации"
+                                          : "Открыть список типов организации"
+                                      }
+                                      onClick={(event) => {
+                                        event.stopPropagation();
+                                        if (activeOrganizationEditCombo === "types") {
+                                          setActiveOrganizationEditCombo(null);
+                                        } else {
+                                          openOrganizationEditCombo("types");
+                                        }
+                                      }}
+                                    >
+                                      {activeOrganizationEditCombo === "types" ? "▴" : "▾"}
+                                    </button>
+                                    {selectedOrganizationTypeSummaryForEdit && (
+                                      <button
+                                        type="button"
+                                        className="relation-combobox-clear-button organization-type-edit-clear-button"
+                                        aria-label="Очистить выбор типов организации"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          setOrganizationCardEditForm((prev) => ({
+                                            ...prev,
+                                            organUnitTypeIds: []
+                                          }));
+                                          setOrganizationTypeEditFilter("");
+                                        }}
+                                      >
+                                        ×
+                                      </button>
+                                    )}
+                                    {activeOrganizationEditCombo === "types" && (
+                                      <div
+                                        className={`relation-combobox-menu${
+                                          organizationEditComboMenuLayouts.types?.openUpward
+                                            ? " relation-combobox-menu-upward"
+                                            : ""
+                                        }`}
+                                        style={{
+                                          top: organizationEditComboMenuLayouts.types?.openUpward
+                                            ? "auto"
+                                            : "calc(100% + 4px)",
+                                          bottom: organizationEditComboMenuLayouts.types?.openUpward
+                                            ? "calc(100% + 4px)"
+                                            : "auto"
+                                        }}
+                                      >
+                                        <div
+                                          className="relation-combobox-options"
+                                        >
+                                          {filteredOrganizationTypeCatalogForEdit.length === 0 ? (
+                                            <div className="relation-combobox-empty">Нет данных</div>
+                                          ) : (
+                                            filteredOrganizationTypeCatalogForEdit.map((item) => {
+                                              const itemId = String(item.id ?? "").trim();
+                                              const isSelected = (
+                                                Array.isArray(organizationCardEditForm.organUnitTypeIds)
+                                                  ? organizationCardEditForm.organUnitTypeIds
+                                                  : []
+                                              )
+                                                .map((typeId) => String(typeId ?? "").trim())
+                                                .includes(itemId);
+                                              return (
+                                                <button
+                                                  key={`organization-edit-type-${itemId}`}
+                                                  type="button"
+                                                  className={`relation-combobox-option organization-type-option${
+                                                    isSelected ? " selected" : ""
+                                                  }`}
+                                                  onClick={() => {
+                                                    toggleOrganizationTypeInEditForm(itemId);
+                                                  }}
+                                                  title={item.name}
+                                                >
+                                                  <span
+                                                    className={`organization-type-option-checkbox${
+                                                      isSelected ? " checked" : ""
+                                                    }`}
+                                                    aria-hidden="true"
+                                                  />
+                                                  <span className="organization-type-option-label">{item.name}</span>
+                                                </button>
+                                              );
+                                            })
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="employee-card-field-value employee-card-field-value-block">
+                                    {(() => {
+                                      const names = Array.isArray(selectedOrganization?.organUnitTypeNames)
+                                        ? selectedOrganization.organUnitTypeNames
+                                        : Array.isArray(selectedOrganization?.organ_unit_type_names)
+                                          ? selectedOrganization.organ_unit_type_names
+                                          : [];
+                                      return names.length > 0 ? names.join(", ") : "-";
+                                    })()}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="employee-card-param">
+                                <span className="employee-card-field-label">Резидент</span>
+                                {isOrganizationCardEditMode ? (
+                                  <select
+                                    className="employee-card-field-input"
+                                    value={organizationCardEditForm.signResident}
+                                    onChange={(event) =>
+                                      setOrganizationCardEditForm((prev) => ({
+                                        ...prev,
+                                        signResident:
+                                          String(event.target.value ?? "").trim().toUpperCase() === "ДА"
+                                            ? "ДА"
+                                            : "НЕТ"
+                                      }))
+                                    }
+                                  >
+                                    <option value="ДА">ДА</option>
+                                    <option value="НЕТ">НЕТ</option>
+                                  </select>
+                                ) : (
+                                  <span className="employee-card-field-value employee-card-field-value-block">
+                                    {selectedOrganization?.signResident ?? selectedOrganization?.sign_resident ?? "-"}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="employee-card-param">
+                                <span className="employee-card-field-label">Страна</span>
+                                {isOrganizationCardEditMode ? (
+                                  <div
+                                    className={`relation-combobox${
+                                      activeOrganizationEditCombo === "country" ? " open" : ""
+                                    }`}
+                                  >
+                                    <input
+                                      type="text"
+                                      className="employee-card-field-input relation-combobox-trigger"
+                                      ref={(element) => {
+                                        organizationEditComboInputRefs.current.country = element;
+                                      }}
+                                      value={
+                                        activeOrganizationEditCombo === "country"
+                                          ? countryEditFilter
+                                          : selectedCountryNameForEdit
+                                      }
+                                      onFocus={() => openOrganizationEditCombo("country")}
+                                      onClick={() => openOrganizationEditCombo("country")}
+                                      onChange={(event) => {
+                                        if (activeOrganizationEditCombo !== "country") {
+                                          openOrganizationEditCombo("country");
+                                        }
+                                        setCountryEditFilter(String(event.target.value ?? ""));
+                                      }}
+                                      placeholder="Выберите страну"
+                                    />
+                                    {selectedCountryNameForEdit && (
+                                      <button
+                                        type="button"
+                                        className="relation-combobox-clear-button"
+                                        aria-label="Очистить выбор страны"
+                                        onClick={(event) => {
+                                          event.stopPropagation();
+                                          setOrganizationCardEditForm((prev) => ({
+                                            ...prev,
+                                            countryId: ""
+                                          }));
+                                          setCountryEditFilter("");
+                                        }}
+                                      >
+                                        ×
+                                      </button>
+                                    )}
+                                    {activeOrganizationEditCombo === "country" && (
+                                      <div
+                                        className={`relation-combobox-menu${
+                                          organizationEditComboMenuLayouts.country?.openUpward
+                                            ? " relation-combobox-menu-upward"
+                                            : ""
+                                        }`}
+                                        style={{
+                                          top: organizationEditComboMenuLayouts.country?.openUpward
+                                            ? "auto"
+                                            : "calc(100% + 4px)",
+                                          bottom: organizationEditComboMenuLayouts.country?.openUpward
+                                            ? "calc(100% + 4px)"
+                                            : "auto"
+                                        }}
+                                      >
+                                        <div
+                                          className="relation-combobox-options"
+                                        >
+                                          {filteredCountryOptionsForEdit.length === 0 ? (
+                                            <div className="relation-combobox-empty">Нет данных</div>
+                                          ) : (
+                                            filteredCountryOptionsForEdit.map((item) => {
+                                              const itemId = String(item.id ?? "").trim();
+                                              return (
+                                                <button
+                                                  key={`organization-edit-country-${itemId}`}
+                                                  type="button"
+                                                  className="relation-combobox-option"
+                                                  onClick={() => {
+                                                    setOrganizationCardEditForm((prev) => ({
+                                                      ...prev,
+                                                      countryId: itemId
+                                                    }));
+                                                    setCountryEditFilter(String(item.name ?? ""));
+                                                    setActiveOrganizationEditCombo(null);
+                                                  }}
+                                                  title={item.name}
+                                                >
+                                                  {item.name}
+                                                </button>
+                                              );
+                                            })
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="employee-card-field-value employee-card-field-value-block">
+                                    {selectedOrganization?.countryName ?? selectedOrganization?.country_name ?? "-"}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="employee-card-params-row">
+                              <div className="employee-card-param" style={{ gridColumn: "1 / -1" }}>
+                                <span className="employee-card-field-label">Адрес</span>
+                                {isOrganizationCardEditMode ? (
+                                  renderEmployeeCardTextInput({
+                                    value: organizationCardEditForm.address,
+                                    onChange: (value) =>
+                                      setOrganizationCardEditForm((prev) => ({
+                                        ...prev,
+                                        address: value
+                                      }))
+                                  })
+                                ) : (
+                                  <span className="employee-card-field-value employee-card-field-value-block">
+                                    {selectedOrganization?.address ?? "-"}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="employee-card-params-row">
+                              <div className="employee-card-param">
+                                <span className="employee-card-field-label">Номер цеха</span>
+                                {isOrganizationCardEditMode ? (
+                                  renderEmployeeCardTextInput({
+                                    value: organizationCardEditForm.kcehNumber,
+                                    onChange: (value) =>
+                                      setOrganizationCardEditForm((prev) => ({
+                                        ...prev,
+                                        kcehNumber: value
+                                      }))
+                                  })
+                                ) : (
+                                  <span className="employee-card-field-value employee-card-field-value-block">
+                                    {selectedOrganizationSnapshot?.kcehNumber ??
+                                      selectedOrganizationSnapshot?.kceh_number ??
+                                      selectedOrganization?.kcehNumber ??
+                                      selectedOrganization?.kceh_number ??
+                                      "-"}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="employee-card-param">
+                                <span className="employee-card-field-label">Префикс претензии</span>
+                                {isOrganizationCardEditMode ? (
+                                  renderEmployeeCardTextInput({
+                                    value: organizationCardEditForm.claimPrefix,
+                                    onChange: (value) =>
+                                      setOrganizationCardEditForm((prev) => ({
+                                        ...prev,
+                                        claimPrefix: value
+                                      }))
+                                  })
+                                ) : (
+                                  <span className="employee-card-field-value employee-card-field-value-block">
+                                    {selectedOrganizationSnapshot?.claimPrefix ??
+                                      selectedOrganizationSnapshot?.claim_prefix ??
+                                      selectedOrganization?.claimPrefix ??
+                                      selectedOrganization?.claim_prefix ??
+                                      "-"}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="employee-card-param">
+                                <span className="employee-card-field-label">Fast Track</span>
+                                {isOrganizationCardEditMode ? (
+                                  <select
+                                    className="employee-card-field-input"
+                                    value={organizationCardEditForm.fastTrack}
+                                    onChange={(event) =>
+                                      setOrganizationCardEditForm((prev) => ({
+                                        ...prev,
+                                        fastTrack: String(event.target.value ?? "").trim().toUpperCase()
+                                      }))
+                                    }
+                                  >
+                                    <option value="">Не выбрано</option>
+                                    <option value="ДА">ДА</option>
+                                    <option value="НЕТ">НЕТ</option>
+                                  </select>
+                                ) : (
+                                  <span className="employee-card-field-value employee-card-field-value-block">
+                                    {selectedOrganizationSnapshot?.fastTrack ??
+                                      selectedOrganizationSnapshot?.fast_track ??
+                                      selectedOrganization?.fastTrack ??
+                                      selectedOrganization?.fast_track ??
+                                      "-"}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </section>
+                        </div>
+                      )}
+                      {isSelectedOrganizationResident &&
+                        activeOrganizationCardTab === ORGANIZATION_CARD_TABS.DADATA && (
+                        <div className="employee-card-main-tab-content organization-card-main-tab-content">
+                          <section className="employee-card-section">
+                            <div className="employee-card-section-header organization-dadata-sticky-header">
+                              <h3>ДаДата</h3>
+                              <div className="employee-card-section-actions">
+                                <label className="organization-dadata-visible-only-toggle">
+                                  <input
+                                    type="checkbox"
+                                    checked={isDadataVisibleOnlyEnabled}
+                                    onChange={(event) =>
+                                      setIsDadataVisibleOnlyEnabled(Boolean(event.target.checked))
+                                    }
+                                  />
+                                  <span>Только видимые атрибуты</span>
+                                </label>
+                                <button
+                                  type="button"
+                                  className="panel-action-button"
+                                  onClick={refreshOrganizationDadata}
+                                  disabled={isOrganizationDadataRefreshing}
+                                >
+                                  {isOrganizationDadataRefreshing ? "Обновление..." : "Обновить"}
+                                </button>
+                              </div>
+                            </div>
+                            <div className="organization-dadata-array-section">
+                              <button
+                                type="button"
+                                className="report-template-level-toggle organization-dadata-level-toggle"
+                                onClick={() => toggleOrganizationDadataSection("company")}
+                              >
+                                <span className="report-template-level-toggle-icon" aria-hidden="true">
+                                  {organizationDadataCollapsedSections.company ? "▸" : "▾"}
+                                </span>
+                                <span>Информация о компании</span>
+                              </button>
+                              {!organizationDadataCollapsedSections.company && (
+                                <div
+                                  className="organization-dadata-table-wrapper"
+                                  ref={organizationDadataCompanyTableWrapperRef}
+                                  onDragOver={(event) =>
+                                    handleDadataRowDragOver("company", event)
+                                  }
+                                >
+                                  <table className="organization-dadata-table">
+                                    <thead>
+                                      <tr>
+                                        <th>Параметр</th>
+                                        <th>Значение</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {selectedOrganizationCompanyInfoRows.length > 0 ? (
+                                        selectedOrganizationCompanyInfoRows.map((row) => (
+                                          <tr
+                                            key={row.key}
+                                            draggable
+                                            onDragStart={(event) =>
+                                              handleDadataRowDragStart(
+                                                "company",
+                                                row.orderKey ?? row.key,
+                                                event
+                                              )
+                                            }
+                                            onDrag={(event) =>
+                                              handleDadataRowDrag("company", event)
+                                            }
+                                            onDragOver={(event) =>
+                                              handleDadataRowDragOver("company", event)
+                                            }
+                                            onDrop={(event) =>
+                                              handleDadataRowDrop(
+                                                "company",
+                                                row.key,
+                                                selectedOrganizationCompanyInfoRows,
+                                                event
+                                              )
+                                            }
+                                            onDragEnd={handleDadataRowDragEnd}
+                                            onMouseDown={(event) => {
+                                              if (event.button !== 0) {
+                                                return;
+                                              }
+                                              handleSelectDadataRow("company", row.orderKey ?? row.key);
+                                            }}
+                                            className={`organization-dadata-row-draggable${
+                                              row.isMismatch ? " organization-dadata-row-mismatch" : ""
+                                            }${
+                                              dadataDraggingRowKey === String(row.key ?? "").trim()
+                                                ? " organization-dadata-row-dragging"
+                                                : ""
+                                            }${
+                                              selectedDadataRowBySection.company ===
+                                              normalizeDadataOrderKey(row.orderKey ?? row.key)
+                                                ? " organization-dadata-row-selected"
+                                                : ""
+                                            }`}
+                                          >
+                                            <td>
+                                              <label className="organization-dadata-attribute-toggle">
+                                                <input
+                                                  type="checkbox"
+                                                  checked={isDadataAttributeVisible(row.key)}
+                                                  onChange={() =>
+                                                    toggleDadataAttributeVisibility(row.key)
+                                                  }
+                                                />
+                                                <span>{row.label}</span>
+                                              </label>
+                                            </td>
+                                            <td>{row.value}</td>
+                                          </tr>
+                                        ))
+                                      ) : (
+                                        <tr>
+                                          <td colSpan={2}>Данные отсутствуют</td>
+                                        </tr>
+                                      )}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </div>
+                            <div className="organization-dadata-array-section">
+                              <button
+                                type="button"
+                                className="report-template-level-toggle organization-dadata-level-toggle"
+                                onClick={() => toggleOrganizationDadataSection("address")}
+                              >
+                                <span className="report-template-level-toggle-icon" aria-hidden="true">
+                                  {organizationDadataCollapsedSections.address ? "▸" : "▾"}
+                                </span>
+                                <span>Адресная информация</span>
+                              </button>
+                              {!organizationDadataCollapsedSections.address && (
+                                <div
+                                  className="organization-dadata-table-wrapper"
+                                  ref={organizationDadataAddressTableWrapperRef}
+                                  onDragOver={(event) =>
+                                    handleDadataRowDragOver("address", event)
+                                  }
+                                >
+                                  <table className="organization-dadata-table">
+                                    <thead>
+                                      <tr>
+                                        <th>Параметр</th>
+                                        <th>Значение</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {selectedOrganizationAddressInfoRows.length > 0 ? (
+                                        selectedOrganizationAddressInfoRows.map((row) => (
+                                          <tr
+                                            key={row.key}
+                                            draggable
+                                            onDragStart={(event) =>
+                                              handleDadataRowDragStart(
+                                                "address",
+                                                row.orderKey ?? row.key,
+                                                event
+                                              )
+                                            }
+                                            onDrag={(event) =>
+                                              handleDadataRowDrag("address", event)
+                                            }
+                                            onDragOver={(event) =>
+                                              handleDadataRowDragOver("address", event)
+                                            }
+                                            onDrop={(event) =>
+                                              handleDadataRowDrop(
+                                                "address",
+                                                row.key,
+                                                selectedOrganizationAddressInfoRows,
+                                                event
+                                              )
+                                            }
+                                            onDragEnd={handleDadataRowDragEnd}
+                                            onMouseDown={(event) => {
+                                              if (event.button !== 0) {
+                                                return;
+                                              }
+                                              handleSelectDadataRow("address", row.orderKey ?? row.key);
+                                            }}
+                                            className={`organization-dadata-row-draggable${
+                                              row.isMismatch ? " organization-dadata-row-mismatch" : ""
+                                            }${
+                                              dadataDraggingRowKey === String(row.key ?? "").trim()
+                                                ? " organization-dadata-row-dragging"
+                                                : ""
+                                            }${
+                                              selectedDadataRowBySection.address ===
+                                              normalizeDadataOrderKey(row.orderKey ?? row.key)
+                                                ? " organization-dadata-row-selected"
+                                                : ""
+                                            }`}
+                                          >
+                                            <td>
+                                              <label className="organization-dadata-attribute-toggle">
+                                                <input
+                                                  type="checkbox"
+                                                  checked={isDadataAttributeVisible(row.key)}
+                                                  onChange={() =>
+                                                    toggleDadataAttributeVisibility(row.key)
+                                                  }
+                                                />
+                                                <span>{row.label}</span>
+                                              </label>
+                                            </td>
+                                            <td>{row.value}</td>
+                                          </tr>
+                                        ))
+                                      ) : (
+                                        <tr>
+                                          <td colSpan={2}>Адресная информация отсутствует</td>
+                                        </tr>
+                                      )}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+                            </div>
+                          </section>
+                        </div>
+                      )}
+                    </div>
+                  </aside>
+                )}
                 {isReportSettingsPage && (
-                  <aside className={`employee-card-panel${isReportCardVisible ? " open" : ""}`}>
+                  <aside className={`employee-card-panel report-card-panel${isReportCardVisible ? " open" : ""}`}>
                     <div className="employee-card-panel-header">
                       <h2>Карточка отчета</h2>
                       <div className="employee-card-full-name employee-card-full-name-header">
@@ -10670,12 +14930,12 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                       </button>
                     </div>
                     <div className="employee-card-panel-body">
-                      <div className="employee-card-tabs" role="tablist" aria-label="Вкладки карточки отчета">
+                      <div className="report-card-tabs" role="tablist" aria-label="Вкладки карточки отчета">
                         <button
                           type="button"
                           role="tab"
                           aria-selected={activeReportCardTab === REPORT_CARD_TABS.MAIN}
-                          className={`employee-card-tab${
+                          className={`report-card-tab${
                             activeReportCardTab === REPORT_CARD_TABS.MAIN ? " active" : ""
                           }`}
                           onClick={() => setActiveReportCardTab(REPORT_CARD_TABS.MAIN)}
@@ -10686,7 +14946,7 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                           type="button"
                           role="tab"
                           aria-selected={activeReportCardTab === REPORT_CARD_TABS.SQL}
-                          className={`employee-card-tab${
+                          className={`report-card-tab${
                             activeReportCardTab === REPORT_CARD_TABS.SQL ? " active" : ""
                           }`}
                           onClick={() => setActiveReportCardTab(REPORT_CARD_TABS.SQL)}
@@ -10698,7 +14958,7 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                           type="button"
                           role="tab"
                           aria-selected={activeReportCardTab === REPORT_CARD_TABS.TEMPLATE}
-                          className={`employee-card-tab${
+                          className={`report-card-tab${
                             activeReportCardTab === REPORT_CARD_TABS.TEMPLATE ? " active" : ""
                           }`}
                           onClick={() => setActiveReportCardTab(REPORT_CARD_TABS.TEMPLATE)}
@@ -10710,7 +14970,7 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                           type="button"
                           role="tab"
                           aria-selected={activeReportCardTab === REPORT_CARD_TABS.PREVIEW}
-                          className={`employee-card-tab${
+                          className={`report-card-tab${
                             activeReportCardTab === REPORT_CARD_TABS.PREVIEW ? " active" : ""
                           }`}
                           onClick={() => setActiveReportCardTab(REPORT_CARD_TABS.PREVIEW)}
@@ -10720,7 +14980,11 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                         </button>
                       </div>
                       {activeReportCardTab === REPORT_CARD_TABS.MAIN && (
-                        <div className="employee-card-main-tab-content">
+                        <div
+                          className={`employee-card-main-tab-content report-card-main-tab-content${
+                            isReportMainSettingsEditable ? " employee-card-main-tab-content-edit-mode" : ""
+                          }`}
+                        >
                           <section className="employee-card-section">
                             <div className="employee-card-subordination-header">
                               <h3>Основные настройки</h3>
@@ -10766,11 +15030,7 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                                 )}
                               </div>
                             </div>
-                            <div
-                              className={`employee-card-params${
-                                isReportMainSettingsEditable ? " report-card-main-settings-editing" : ""
-                              }`}
-                            >
+                            <div className="employee-card-params">
                               <div className="employee-card-params-row">
                                 <div className="employee-card-param">
                                   <span className="employee-card-field-label">Код отчета</span>
@@ -10958,13 +15218,13 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                           >
                             {isCreatingReportCard && (
                               <p className="report-card-links-disabled-note">
-                                Сохраните отчет, чтобы управлять связями с организациями и группами доступа.
+                                Сохраните отчет, чтобы управлять связями с организациями, получателями и группами доступа.
                               </p>
                             )}
                             <div className="report-card-links-grid">
-                              <div className="report-card-links-card">
+                              <div className="report-card-links-card report-card-links-card-organizations">
                                 <div className="employee-card-subordination-header">
-                                  <h3>Связь с организациями</h3>
+                                  <h3>Организации</h3>
                                   <button
                                     type="button"
                                     className="panel-action-button employee-card-add-position-button"
@@ -10974,7 +15234,8 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                                       isReportOrganizationAddMode ||
                                       addingReportOrganization ||
                                       Boolean(deletingReportOrganizationId) ||
-                                      Boolean(deletingReportAccessGroupCode)
+                                      Boolean(deletingReportAccessGroupCode) ||
+                                      Boolean(deletingReportRecipientEmail)
                                     }
                                   >
                                     + Добавить
@@ -11079,7 +15340,8 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                                         addingReportOrganization ||
                                         !selectedReportOrganizationIdForAdd ||
                                         Boolean(deletingReportOrganizationId) ||
-                                        Boolean(deletingReportAccessGroupCode)
+                                        Boolean(deletingReportAccessGroupCode) ||
+                                        Boolean(deletingReportRecipientEmail)
                                       }
                                       aria-label="Сохранить связь с организацией"
                                       title="Сохранить"
@@ -11100,12 +15362,6 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                                 )}
                                 <div className="report-card-links-table-wrapper">
                                   <table className="employee-card-positions-table report-card-links-table">
-                                    <thead>
-                                      <tr>
-                                        <th>Название организации</th>
-                                        <th className="employee-card-positions-actions-header" />
-                                      </tr>
-                                    </thead>
                                     <tbody>
                                       {selectedReportOrganizations.length > 0 ? (
                                         selectedReportOrganizations.map((item) => {
@@ -11127,7 +15383,8 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                                                     isCreatingReportCard ||
                                                     !item.organUnitId ||
                                                     isDeleting ||
-                                                    Boolean(deletingReportAccessGroupCode)
+                                                    Boolean(deletingReportAccessGroupCode) ||
+                                                    Boolean(deletingReportRecipientEmail)
                                                   }
                                                   aria-label="Удалить связь с организацией"
                                                   title="Удалить"
@@ -11149,7 +15406,108 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                                   </table>
                                 </div>
                               </div>
-                              <div className="report-card-links-card">
+                              <div className="report-card-links-card report-card-links-card-recipients">
+                                <div className="employee-card-subordination-header">
+                                  <h3>Email получателей</h3>
+                                  <button
+                                    type="button"
+                                    className="panel-action-button employee-card-add-position-button"
+                                    onClick={handleOpenReportRecipientAdd}
+                                    disabled={
+                                      isCreatingReportCard ||
+                                      isReportRecipientAddMode ||
+                                      addingReportRecipient ||
+                                      Boolean(deletingReportOrganizationId) ||
+                                      Boolean(deletingReportAccessGroupCode) ||
+                                      Boolean(deletingReportRecipientEmail)
+                                    }
+                                  >
+                                    + Добавить
+                                  </button>
+                                </div>
+                                {isReportRecipientAddMode && (
+                                  <div className="report-card-links-actions report-card-links-actions-report-recipients">
+                                    <input
+                                      type="text"
+                                      className="employee-card-field-input"
+                                      value={newReportRecipientEmail}
+                                      onChange={(event) => setNewReportRecipientEmail(event.target.value)}
+                                      placeholder="Введите email"
+                                      disabled={addingReportRecipient || Boolean(deletingReportRecipientEmail)}
+                                    />
+                                    <button
+                                      type="button"
+                                      className="employee-card-position-action-button"
+                                      onClick={() => void handleAddReportRecipient()}
+                                      disabled={
+                                        isCreatingReportCard ||
+                                        addingReportRecipient ||
+                                        !String(newReportRecipientEmail ?? "").trim() ||
+                                        Boolean(deletingReportOrganizationId) ||
+                                        Boolean(deletingReportAccessGroupCode) ||
+                                        Boolean(deletingReportRecipientEmail)
+                                      }
+                                      aria-label="Сохранить получателя отчета"
+                                      title="Сохранить"
+                                    >
+                                      ✓
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="employee-card-position-action-button"
+                                      onClick={handleCancelReportRecipientAdd}
+                                      disabled={addingReportRecipient}
+                                      aria-label="Отменить добавление получателя отчета"
+                                      title="Отменить"
+                                    >
+                                      ↩
+                                    </button>
+                                  </div>
+                                )}
+                                <div className="report-card-links-table-wrapper">
+                                  <table className="employee-card-positions-table report-card-links-table">
+                                    <tbody>
+                                      {selectedReportRecipients.length > 0 ? (
+                                        selectedReportRecipients.map((item) => {
+                                          const isDeleting = deletingReportRecipientEmail === item.email;
+                                          return (
+                                            <tr key={`report-recipient-${item.email}`}>
+                                              <td>{item.email}</td>
+                                              <td className="employee-card-positions-actions-cell">
+                                                <button
+                                                  type="button"
+                                                  className="employee-card-position-action-button"
+                                                  onClick={() =>
+                                                    void handleDeleteReportRecipient(item.email)
+                                                  }
+                                                  disabled={
+                                                    isCreatingReportCard ||
+                                                    !item.email ||
+                                                    isDeleting ||
+                                                    Boolean(deletingReportOrganizationId) ||
+                                                    Boolean(deletingReportAccessGroupCode)
+                                                  }
+                                                  aria-label="Удалить получателя отчета"
+                                                  title="Удалить"
+                                                >
+                                                  {isDeleting ? "..." : "✕"}
+                                                </button>
+                                              </td>
+                                            </tr>
+                                          );
+                                        })
+                                      ) : (
+                                        <tr>
+                                          <td colSpan={2} className="report-card-links-empty-cell">
+                                            Нет получателей отчета
+                                          </td>
+                                        </tr>
+                                      )}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                              <div className="report-card-links-card report-card-links-card-access-groups">
                                 <div className="employee-card-subordination-header">
                                   <h3>Группы доступа</h3>
                                   <button
@@ -11161,7 +15519,8 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                                       isReportAccessGroupAddMode ||
                                       addingReportAccessGroup ||
                                       Boolean(deletingReportOrganizationId) ||
-                                      Boolean(deletingReportAccessGroupCode)
+                                      Boolean(deletingReportAccessGroupCode) ||
+                                      Boolean(deletingReportRecipientEmail)
                                     }
                                   >
                                     + Добавить
@@ -11192,7 +15551,8 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                                         addingReportAccessGroup ||
                                         !String(newReportAccessGroupCode ?? "").trim() ||
                                         Boolean(deletingReportOrganizationId) ||
-                                        Boolean(deletingReportAccessGroupCode)
+                                        Boolean(deletingReportAccessGroupCode) ||
+                                        Boolean(deletingReportRecipientEmail)
                                       }
                                       aria-label="Сохранить группу доступа"
                                       title="Сохранить"
@@ -11213,12 +15573,6 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                                 )}
                                 <div className="report-card-links-table-wrapper">
                                   <table className="employee-card-positions-table report-card-links-table">
-                                    <thead>
-                                      <tr>
-                                        <th>Группа доступа</th>
-                                        <th className="employee-card-positions-actions-header" />
-                                      </tr>
-                                    </thead>
                                     <tbody>
                                       {selectedReportAccessGroups.length > 0 ? (
                                         selectedReportAccessGroups.map((item) => {
@@ -11237,7 +15591,8 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                                                     isCreatingReportCard ||
                                                     !item.codeAccess ||
                                                     isDeleting ||
-                                                    Boolean(deletingReportOrganizationId)
+                                                    Boolean(deletingReportOrganizationId) ||
+                                                    Boolean(deletingReportRecipientEmail)
                                                   }
                                                   aria-label="Удалить группу доступа"
                                                   title="Удалить"
@@ -11269,26 +15624,61 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                             <div className="employee-card-subordination-header report-card-sql-header">
                               <h3>SQL-скрипт</h3>
                               <div className="report-card-sql-header-actions">
-                                <button
-                                  type="button"
-                                  className={`panel-action-button report-card-sql-view-button${
-                                    reportSqlViewMode === REPORT_SQL_VIEW_MODES.EDITOR ? " is-active" : ""
-                                  }`}
-                                  onClick={handleOpenReportSqlEditorView}
-                                  disabled={reportSqlViewMode === REPORT_SQL_VIEW_MODES.EDITOR}
-                                >
-                                  Редактор
-                                </button>
-                                <button
-                                  type="button"
-                                  className={`panel-action-button report-card-sql-view-button${
-                                    reportSqlViewMode === REPORT_SQL_VIEW_MODES.RESULTS ? " is-active" : ""
-                                  }`}
-                                  onClick={handleOpenReportSqlResultsView}
-                                  disabled={reportSqlViewMode === REPORT_SQL_VIEW_MODES.RESULTS}
-                                >
-                                  Результаты запроса
-                                </button>
+                                {!isReportSqlEditMode ? (
+                                  <>
+                                    <button
+                                      type="button"
+                                      className={`panel-action-button report-card-sql-view-button${
+                                        reportSqlViewMode === REPORT_SQL_VIEW_MODES.EDITOR ? " is-active" : ""
+                                      }`}
+                                      onClick={handleOpenReportSqlEditorView}
+                                      disabled={reportSqlViewMode === REPORT_SQL_VIEW_MODES.EDITOR}
+                                    >
+                                      Редактор
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className={`panel-action-button report-card-sql-view-button${
+                                        reportSqlViewMode === REPORT_SQL_VIEW_MODES.RESULTS ? " is-active" : ""
+                                      }`}
+                                      onClick={handleOpenReportSqlResultsView}
+                                      disabled={reportSqlViewMode === REPORT_SQL_VIEW_MODES.RESULTS}
+                                    >
+                                      Результаты запроса
+                                    </button>
+                                  </>
+                                ) : null}
+                                {reportSqlViewMode === REPORT_SQL_VIEW_MODES.EDITOR ? (
+                                  isReportSqlEditMode ? (
+                                    <>
+                                      <button
+                                        type="button"
+                                        className="panel-action-button"
+                                        onClick={handleEditOrSaveReportSql}
+                                        disabled={isReportSqlResultsLoading || isReportSqlResultsLoadingMore}
+                                      >
+                                        Сохранить
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="panel-action-button"
+                                        onClick={handleCancelReportSqlEdit}
+                                        disabled={isReportSqlResultsLoading || isReportSqlResultsLoadingMore}
+                                      >
+                                        Отменить
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      className="panel-action-button"
+                                      onClick={handleEditOrSaveReportSql}
+                                      disabled={isReportSqlResultsLoading || isReportSqlResultsLoadingMore}
+                                    >
+                                      Изменить скрипт
+                                    </button>
+                                  )
+                                ) : null}
                                 <button
                                   type="button"
                                   className="panel-action-button report-card-sql-zoom-button"
@@ -11313,71 +15703,80 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                             </div>
                             <div className="report-card-sql-layout">
                               <div className="report-card-sql-main">
-                                {reportSqlViewMode === REPORT_SQL_VIEW_MODES.EDITOR ? (
-                                  isReportSqlEditMode ? (
-                                  <div
-                                      className="report-card-sql-editor-wrapper is-editing"
-                                    style={{
-                                      "--sql-font-size-px": `${reportSqlFontSizePx}px`,
-                                      "--sql-line-height-px": `${reportSqlLineHeightPx}px`
-                                    }}
-                                  >
                                 <div
-                                  className="report-card-sql-active-line"
-                                  style={{ top: `${reportSqlActiveLineTopPx}px` }}
-                                  aria-hidden="true"
-                                />
-                                <pre
-                                  ref={reportSqlGutterRef}
-                                  className="report-card-sql-gutter"
-                                  aria-hidden="true"
-                                  onMouseDown={(event) => event.preventDefault()}
-                                  onClick={handleReportSqlGutterClick}
+                                  className={`report-card-sql-main-view${
+                                    reportSqlViewMode === REPORT_SQL_VIEW_MODES.EDITOR ? "" : " is-hidden"
+                                  }`}
                                 >
-                                  {reportSqlLineNumbers}
-                                </pre>
-                                <pre
-                                  ref={reportSqlHighlightRef}
-                                  className="report-card-sql-highlight"
-                                  aria-hidden="true"
+                                  {isReportSqlEditMode ? (
+                                    <div
+                                      className="report-card-sql-editor-wrapper is-editing"
+                                      style={{
+                                        "--sql-font-size-px": `${reportSqlFontSizePx}px`,
+                                        "--sql-line-height-px": `${reportSqlLineHeightPx}px`
+                                      }}
+                                    >
+                                      <div
+                                        className="report-card-sql-active-line"
+                                        style={{ top: `${reportSqlActiveLineTopPx}px` }}
+                                        aria-hidden="true"
+                                      />
+                                      <pre
+                                        ref={reportSqlGutterRef}
+                                        className="report-card-sql-gutter"
+                                        aria-hidden="true"
+                                        onMouseDown={(event) => event.preventDefault()}
+                                        onClick={handleReportSqlGutterClick}
+                                      >
+                                        {reportSqlLineNumbers}
+                                      </pre>
+                                      <pre
+                                        ref={reportSqlHighlightRef}
+                                        className="report-card-sql-highlight"
+                                        aria-hidden="true"
+                                      >
+                                        <code
+                                          className="language-sql"
+                                          dangerouslySetInnerHTML={{ __html: highlightedReportSql }}
+                                        />
+                                      </pre>
+                                      <textarea
+                                        ref={reportSqlEditorRef}
+                                        className="report-card-sql-editor"
+                                        aria-label="SQL query editor"
+                                        value={reportSqlDraft}
+                                        spellCheck={false}
+                                        onScroll={handleReportSqlEditorScroll}
+                                        onSelect={(event) => updateReportSqlActiveLineFromTarget(event.target)}
+                                        onKeyUp={(event) => updateReportSqlActiveLineFromTarget(event.target)}
+                                        onClick={(event) => updateReportSqlActiveLineFromTarget(event.target)}
+                                        onChange={(event) => {
+                                          setReportSqlDraft(event.target.value);
+                                          updateReportSqlActiveLineFromTarget(event.target);
+                                        }}
+                                      />
+                                    </div>
+                                  ) : (
+                                    <pre
+                                      className="report-card-sql-code"
+                                      aria-label="SQL query with syntax highlighting"
+                                      style={{
+                                        "--sql-font-size-px": `${reportSqlFontSizePx}px`,
+                                        "--sql-line-height-px": `${reportSqlLineHeightPx}px`
+                                      }}
+                                    >
+                                      <code
+                                        className="language-sql"
+                                        dangerouslySetInnerHTML={{ __html: highlightedReportSql }}
+                                      />
+                                    </pre>
+                                  )}
+                                </div>
+                                <div
+                                  className={`report-card-sql-main-view${
+                                    reportSqlViewMode === REPORT_SQL_VIEW_MODES.RESULTS ? "" : " is-hidden"
+                                  }`}
                                 >
-                                  <code
-                                    className="language-sql"
-                                    dangerouslySetInnerHTML={{ __html: highlightedReportSql }}
-                                  />
-                                </pre>
-                                <textarea
-                                  ref={reportSqlEditorRef}
-                                  className="report-card-sql-editor"
-                                  aria-label="SQL query editor"
-                                  value={reportSqlDraft}
-                                  spellCheck={false}
-                                  onScroll={handleReportSqlEditorScroll}
-                                  onSelect={(event) => updateReportSqlActiveLineFromTarget(event.target)}
-                                  onKeyUp={(event) => updateReportSqlActiveLineFromTarget(event.target)}
-                                  onClick={(event) => updateReportSqlActiveLineFromTarget(event.target)}
-                                  onChange={(event) => {
-                                    setReportSqlDraft(event.target.value);
-                                    updateReportSqlActiveLineFromTarget(event.target);
-                                  }}
-                                />
-                                  </div>
-                                ) : (
-                                  <pre
-                                    className="report-card-sql-code"
-                                    aria-label="SQL query with syntax highlighting"
-                                    style={{
-                                      "--sql-font-size-px": `${reportSqlFontSizePx}px`,
-                                      "--sql-line-height-px": `${reportSqlLineHeightPx}px`
-                                    }}
-                                  >
-                                    <code
-                                      className="language-sql"
-                                      dangerouslySetInnerHTML={{ __html: highlightedReportSql }}
-                                    />
-                                  </pre>
-                                  )
-                                ) : (
                                   <div
                                     className="report-sql-results-wrapper"
                                     ref={reportSqlResultsWrapperRef}
@@ -11387,101 +15786,26 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                                       "--sql-line-height-px": `${reportSqlLineHeightPx}px`
                                     }}
                                   >
-                                    {isReportSqlResultsLoading ? (
-                                      <div className="report-sql-results-loader">
-                                        <div
-                                          className="report-sql-execution-loader"
-                                          aria-label="Идет выполнение SQL-скрипта"
-                                        />
-                                        <p>Выполняется SQL-скрипт...</p>
-                                      </div>
-                                    ) : reportSqlResultsError ? (
-                                      <div className="report-sql-results-empty-state">
-                                        {reportSqlResultsError}
-                                      </div>
-                                    ) : reportSqlResultsColumns.length === 0 ? (
-                                      <div className="report-sql-results-empty-state">Результаты не найдены</div>
-                                    ) : (
-                                      <table className="report-sql-results-table">
-                                        <thead>
-                                          <tr>
-                                            <th className="report-sql-results-row-number-header">№</th>
-                                            {reportSqlResultsColumns.map((columnName) => (
-                                              <th key={columnName}>
-                                                <button
-                                                  type="button"
-                                                  className={`column-sort-button${
-                                                    getReportSqlResultsSortDirectionForField(columnName)
-                                                      ? " active"
-                                                      : ""
-                                                  }`}
-                                                  onClick={() => handleReportSqlResultsSortClick(columnName)}
-                                                >
-                                                  <span>{columnName}</span>
-                                                  {getReportSqlResultsSortDirectionForField(columnName) && (
-                                                    <span className="sort-icon-group">
-                                                      <span className="sort-icon">
-                                                        {getReportSqlResultsSortDirectionForField(columnName) === "ASC"
-                                                          ? "▲"
-                                                          : "▼"}
-                                                      </span>
-                                                      {getReportSqlResultsSortOrderForField(columnName) && (
-                                                        <span className="sort-order-index">
-                                                          {getReportSqlResultsSortOrderForField(columnName)}
-                                                        </span>
-                                                      )}
-                                                    </span>
-                                                  )}
-                                                </button>
-                                              </th>
-                                            ))}
-                                          </tr>
-                                        </thead>
-                                        <tbody>
-                                          {sortedReportSqlResultsRows.map((row, rowIndex) => (
-                                            <tr key={`report-sql-row-${rowIndex}`}>
-                                              <td className="report-sql-results-row-number-cell">
-                                                {rowIndex + 1}
-                                              </td>
-                                              {reportSqlResultsColumns.map((columnName) => (
-                                                <td key={`report-sql-cell-${rowIndex}-${columnName}`}>
-                                                  {formatReportSqlResultCellValue(row?.[columnName])}
-                                                </td>
-                                              ))}
-                                            </tr>
-                                          ))}
-                                        </tbody>
-                                      </table>
-                                    )}
+                                    <MemoizedReportSqlResultsContent
+                                      isLoading={isReportSqlResultsLoading}
+                                      error={reportSqlResultsError}
+                                      columns={reportSqlResultsColumns}
+                                      rows={sortedReportSqlResultsRows}
+                                      getSortDirectionForField={getReportSqlResultsSortDirectionForField}
+                                      getSortOrderForField={getReportSqlResultsSortOrderForField}
+                                      onSortClick={handleReportSqlResultsSortClick}
+                                      formatCellValue={formatReportSqlResultCellValue}
+                                    />
                                     {!isReportSqlResultsLoading && isReportSqlResultsLoadingMore && (
                                       <div className="report-sql-results-loading-more">Загрузка следующих записей...</div>
                                     )}
                                   </div>
-                                )}
+                                </div>
                               </div>
                             </div>
                             <div className="report-card-sql-actions">
                               <div className="report-card-sql-actions-left">
-                                {reportSqlViewMode === REPORT_SQL_VIEW_MODES.EDITOR ? (
-                                  <>
-                                <button
-                                  type="button"
-                                  className="panel-action-button"
-                                  onClick={handleEditOrSaveReportSql}
-                                >
-                                      {isReportSqlEditMode ? "Сохранить" : "Изменить скрипт"}
-                                </button>
-                                {isReportSqlEditMode ? (
-                                  <button
-                                    type="button"
-                                    className="panel-action-button"
-                                    onClick={handleCancelReportSqlEdit}
-                                  >
-                                    Отменить
-                                  </button>
-                                    ) : null}
-                                  </>
-                                ) : (
+                                {reportSqlViewMode === REPORT_SQL_VIEW_MODES.RESULTS ? (
                                   <button
                                     type="button"
                                     className="panel-action-button"
@@ -11492,7 +15816,7 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                                       ? "Обновление результатов..."
                                       : "Обновить результаты"}
                                   </button>
-                                )}
+                                ) : null}
                               </div>
                               {reportSqlViewMode === REPORT_SQL_VIEW_MODES.EDITOR && (
                                 <div className="report-card-sql-actions-right">
@@ -11505,7 +15829,9 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                               {reportSqlViewMode === REPORT_SQL_VIEW_MODES.RESULTS && (
                                 <div className="report-card-sql-actions-right">
                                   <span>
-                                    Найдено записей: {Number(reportSqlResultsStats.selectedRows).toLocaleString("ru-RU")}
+                                    Найдено записей: {Number(reportSqlResultsStats.selectedRows).toLocaleString("ru-RU")},
+                                    {" "}на экран выведены первые {REPORT_SQL_RESULTS_PREVIEW_LIMIT} (для проверки
+                                    корректности запроса)
                                   </span>
                                   <span>
                                     Время выполнения: {reportSqlResultsStats.executionTime} (
@@ -11524,6 +15850,11 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                             <h3>Настройка шаблона</h3>
                               {!isReportTemplateSettingsLoading && (
                                 <div className="report-template-settings-actions">
+                                  {isReportTemplateSqlSyncing && (
+                                    <span className="report-template-sql-sync-indicator">
+                                      Сверка с SQL...
+                                    </span>
+                                  )}
                                   {reportTemplateViewMode === REPORT_TEMPLATE_VIEW_MODES.SETTINGS ? (
                                     isReportTemplateEditMode ? (
                                       <>
@@ -11590,6 +15921,26 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                                       >
                                         Отменить
                                       </button>
+                                      <button
+                                        type="button"
+                                        className="panel-action-button report-card-sql-zoom-button"
+                                        onClick={handleDecreaseReportTemplateJsonZoom}
+                                        aria-label="Отдалить текст JSON"
+                                        title="Отдалить"
+                                        disabled={reportTemplateJsonZoom <= 0.7}
+                                      >
+                                        −
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="panel-action-button report-card-sql-zoom-button"
+                                        onClick={handleIncreaseReportTemplateJsonZoom}
+                                        aria-label="Приблизить текст JSON"
+                                        title="Приблизить"
+                                        disabled={reportTemplateJsonZoom >= 1.6}
+                                      >
+                                        +
+                                      </button>
                                     </>
                                   ) : (
                                     <>
@@ -11625,6 +15976,26 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                                       >
                                         Изменить
                                       </button>
+                                      <button
+                                        type="button"
+                                        className="panel-action-button report-card-sql-zoom-button"
+                                        onClick={handleDecreaseReportTemplateJsonZoom}
+                                        aria-label="Отдалить текст JSON"
+                                        title="Отдалить"
+                                        disabled={reportTemplateJsonZoom <= 0.7}
+                                      >
+                                        −
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="panel-action-button report-card-sql-zoom-button"
+                                        onClick={handleIncreaseReportTemplateJsonZoom}
+                                        aria-label="Приблизить текст JSON"
+                                        title="Приблизить"
+                                        disabled={reportTemplateJsonZoom >= 1.6}
+                                      >
+                                        +
+                                      </button>
                                     </>
                                   )}
                                 </div>
@@ -11650,6 +16021,18 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                                 >
                                   <div className="report-template-content-track">
                                     <div className="report-template-content-pane report-template-content-pane-settings">
+                                <div className="report-template-level-section report-template-level-section-two">
+                                  <button
+                                    type="button"
+                                    className="report-template-level-toggle"
+                                    onClick={() => setIsReportTemplateLevelTwoExpanded((prev) => !prev)}
+                                  >
+                                    <span className="report-template-level-toggle-icon" aria-hidden="true">
+                                      {isReportTemplateLevelTwoExpanded ? "▾" : "▸"}
+                                    </span>
+                                    <span>Логотип и общие настройки</span>
+                                  </button>
+                                  {isReportTemplateLevelTwoExpanded ? (
                                 <div className="report-template-top-grid">
                                   <div className="report-template-logo-card">
                                     <h4>Логотип</h4>
@@ -11825,12 +16208,39 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                                     </div>
                                   </div>
                                 </div>
+                                  ) : null}
+                                </div>
+                                <div
+                                  className={`report-template-level-gap${
+                                    !isReportTemplateLevelTwoExpanded && !isReportTemplateLevelThreeExpanded
+                                      ? " is-collapsed"
+                                      : ""
+                                  }`}
+                                  aria-hidden="true"
+                                />
 
-                                <div className="report-template-fields-card">
+                                <div className="report-template-level-section report-template-level-section-three">
+                                <div
+                                  className="report-template-fields-card"
+                                >
                                   <div className="report-template-fields-header">
-                                    <h4>Настройка столбцов</h4>
+                                    <button
+                                      type="button"
+                                      className="report-template-level-toggle report-template-level-toggle-inline"
+                                      onClick={() => setIsReportTemplateLevelThreeExpanded((prev) => !prev)}
+                                    >
+                                      <span className="report-template-level-toggle-icon" aria-hidden="true">
+                                        {isReportTemplateLevelThreeExpanded ? "▾" : "▸"}
+                                      </span>
+                                      <span>Настройка столбцов</span>
+                                    </button>
                                   </div>
-                                  <div className="report-template-fields-table-wrapper" ref={reportTemplateFieldsTableWrapperRef}>
+                                  {isReportTemplateLevelThreeExpanded ? (
+                                  <div
+                                    className="report-template-fields-table-wrapper"
+                                    ref={reportTemplateFieldsTableWrapperRef}
+                                    onDragOver={handleReportTemplateFieldsWrapperDragOver}
+                                  >
                                     <table
                                       className="report-template-fields-table"
                                       style={{ width: `${reportTemplateFieldsTableWidthPx}px` }}
@@ -11909,6 +16319,7 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                                                               event
                                                             )
                                                         }
+                                                        onDrag={handleReportTemplateFieldDrag}
                                                         onDragEnd={handleReportTemplateFieldDragEnd}
                                                         title={isFieldVisible ? "Перетащить строку" : "Строка скрыта"}
                                                         aria-label={isFieldVisible ? "Перетащить строку" : "Строка скрыта"}
@@ -12221,6 +16632,8 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                                       </tbody>
                                     </table>
                                   </div>
+                                  ) : null}
+                                </div>
                                 </div>
                                     </div>
                                     <div className="report-template-content-pane report-template-content-pane-json">
@@ -12228,6 +16641,10 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                                     className={`report-template-json-panel${
                                       isReportTemplateJsonEditMode ? " is-editing" : ""
                                     }`}
+                                    style={{
+                                      "--json-font-size-px": `${reportTemplateJsonFontSizePx}px`,
+                                      "--json-line-height-px": `${reportTemplateJsonLineHeightPx}px`
+                                    }}
                                   >
                                     {isReportTemplateJsonEditMode ? (
                                       <div
@@ -12259,8 +16676,6 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                                       value={reportTemplateJsonDraft}
                                       onChange={(event) => setReportTemplateJsonDraft(event.target.value)}
                                       onSelect={handleReportTemplateJsonEditorSelect}
-                                      onKeyUp={handleReportTemplateJsonEditorSelect}
-                                      onClick={handleReportTemplateJsonEditorSelect}
                                       onScroll={handleReportTemplateJsonEditorScroll}
                                       readOnly={!isReportTemplateJsonEditMode}
                                     />
@@ -12376,92 +16791,276 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
               </div>
             </>
           ) : (
-            <div className="main-panel-placeholder" />
-          )}
-        </section>
-        {isListPage && (
-          <section className="bottom-controls-panel" ref={bottomPanelRef}>
-            <div className="grid-controls">
-              <div className="pagination-controls">
+            <section className="print-forms-page">
+              <div className="employee-card-tabs">
                 <button
                   type="button"
-                  className="pager-button"
-                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                  disabled={employeesLoading || currentPage <= 1}
-                  aria-label="Предыдущая страница"
-                  title="Предыдущая страница"
+                  className={`employee-card-tab${
+                    activePrintFormsTab === PRINT_FORMS_TABS.LIST ? " active" : ""
+                  }`}
+                  onClick={() => setActivePrintFormsTab(PRINT_FORMS_TABS.LIST)}
                 >
-                  ←
+                  Список шаблонов
                 </button>
-                {visiblePaginationItems.map((item, index) =>
-                  typeof item === "string" && item.startsWith("ellipsis-") ? (
-                    <span key={`ellipsis-${index}`} className="pager-ellipsis" aria-hidden="true">
-                      ...
-                    </span>
-                  ) : (
-                    <button
-                      key={item}
-                      type="button"
-                      className={`pager-button${item === currentPage ? " active" : ""}`}
-                      onClick={() => setCurrentPage(item)}
-                      disabled={employeesLoading}
-                    >
-                      {item}
-                    </button>
-                  )
-                )}
                 <button
                   type="button"
-                  className="pager-button"
-                  onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                  disabled={employeesLoading || currentPage >= totalPages}
-                  aria-label="Следующая страница"
-                  title="Следующая страница"
+                  className={`employee-card-tab${
+                    activePrintFormsTab === PRINT_FORMS_TABS.CREATE ? " active" : ""
+                  }`}
+                  onClick={() => setActivePrintFormsTab(PRINT_FORMS_TABS.CREATE)}
                 >
-                  →
+                  Создание шаблона
                 </button>
               </div>
-              <label className="page-jump-control">
-                <span>Перейти на страницу:</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={totalPages}
-                  value={pageJumpInput}
-                  onChange={(event) => setPageJumpInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      event.preventDefault();
-                      goToPage();
-                    }
-                  }}
-                  disabled={employeesLoading}
-                />
-                <button type="button" className="page-jump-button" onClick={goToPage} disabled={employeesLoading}>
-                  Перейти
-                </button>
-              </label>
-              <span className="selected-count-label">Отобрано - {totalCount} записей</span>
-              <div className="grid-controls-right">
-                <label className="page-size-control">
-                  <span>Записей на странице:</span>
-                  <select
-                    value={pageSize}
-                    onChange={(event) => {
-                      setPageSize(Number(event.target.value));
-                      setCurrentPage(1);
+              {printFormsError && <div className="print-forms-error">{printFormsError}</div>}
+              {activePrintFormsTab === PRINT_FORMS_TABS.LIST ? (
+                <div className="print-forms-list-wrapper">
+                  <div className="main-panel-actions">
+                    <button
+                      type="button"
+                      className="panel-action-button"
+                      onClick={() => setPrintFormsRefreshToken((prev) => prev + 1)}
+                      disabled={printFormsLoading}
+                    >
+                      <span aria-hidden="true">↻</span>
+                      <span>Обновить</span>
+                    </button>
+                  </div>
+                  <div className="table-wrapper">
+                    <table className="employee-grid">
+                      <thead>
+                        <tr>
+                          <th>
+                            <div className="column-sort-button">Код</div>
+                          </th>
+                          <th>
+                            <div className="column-sort-button">Название</div>
+                          </th>
+                          <th>
+                            <div className="column-sort-button">Описание</div>
+                          </th>
+                          <th>
+                            <div className="column-sort-button">Обновлен</div>
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {printFormsLoading && (
+                          <tr>
+                            <td colSpan={4}>Загрузка шаблонов...</td>
+                          </tr>
+                        )}
+                        {!printFormsLoading && printFormsItems.length === 0 && (
+                          <tr>
+                            <td colSpan={4}>Шаблоны не найдены</td>
+                          </tr>
+                        )}
+                        {!printFormsLoading &&
+                          printFormsItems.map((item) => (
+                            <tr key={String(item?.id ?? "")}>
+                              <td>{String(item?.code ?? "")}</td>
+                              <td>{String(item?.name ?? "")}</td>
+                              <td>{String(item?.description ?? "")}</td>
+                              <td>{String(item?.updatedAt ?? item?.updated_at ?? "")}</td>
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : (
+                <div className="print-forms-create-form">
+                  <label className="employee-card-param">
+                    <span className="employee-card-field-label">Название</span>
+                    <input
+                      type="text"
+                      className="employee-card-field-input"
+                      value={printFormName}
+                      onChange={(event) => setPrintFormName(event.target.value)}
+                    />
+                  </label>
+                  <label className="employee-card-param">
+                    <span className="employee-card-field-label">Код</span>
+                    <input
+                      type="text"
+                      className="employee-card-field-input"
+                      value={printFormCode}
+                      onChange={(event) => setPrintFormCode(event.target.value)}
+                    />
+                  </label>
+                  <label className="employee-card-param">
+                    <span className="employee-card-field-label">Описание</span>
+                    <input
+                      type="text"
+                      className="employee-card-field-input"
+                      value={printFormDescription}
+                      onChange={(event) => setPrintFormDescription(event.target.value)}
+                    />
+                  </label>
+                  <label className="employee-card-param">
+                    <span className="employee-card-field-label">SQL для данных</span>
+                    <textarea
+                      className="employee-card-field-input print-forms-textarea"
+                      value={printFormDataSql}
+                      onChange={(event) => setPrintFormDataSql(event.target.value)}
+                    />
+                  </label>
+                  <label className="employee-card-param">
+                    <span className="employee-card-field-label">Field mapping (JSON-массив)</span>
+                    <textarea
+                      className="employee-card-field-input print-forms-textarea"
+                      value={printFormFieldMappingText}
+                      onChange={(event) => setPrintFormFieldMappingText(event.target.value)}
+                    />
+                  </label>
+                  <label className="employee-card-param">
+                    <span className="employee-card-field-label">Overlay settings (JSON-объект)</span>
+                    <textarea
+                      className="employee-card-field-input print-forms-textarea"
+                      value={printFormOverlaySettingsText}
+                      onChange={(event) => setPrintFormOverlaySettingsText(event.target.value)}
+                    />
+                  </label>
+                  <div className="employee-card-param">
+                    <span className="employee-card-field-label">PDF шаблон</span>
+                    <div className="print-forms-upload-actions">
+                      <label className="panel-action-button upload-action-button print-forms-upload-label">
+                        <span aria-hidden="true">↑</span>
+                        <span>{printFormPdfName ? `Файл: ${printFormPdfName}` : "Загрузить PDF"}</span>
+                        <input
+                          type="file"
+                          accept=".pdf,application/pdf"
+                          onChange={handlePrintFormPdfSelect}
+                          hidden
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="panel-action-button"
+                        onClick={handleRecognizePrintFormTemplate}
+                        disabled={isPrintFormRecognizing || !printFormPdfBase64}
+                      >
+                        <span aria-hidden="true">⧉</span>
+                        <span>{isPrintFormRecognizing ? "Распознавание..." : "Распознать {атрибуты}"}</span>
+                      </button>
+                    </div>
+                    {printFormDetectedFields.length > 0 && (
+                      <div className="print-forms-detected-fields">
+                        <span className="employee-card-field-label">Найдены атрибуты:</span>
+                        <div className="print-forms-detected-fields-list">
+                          {printFormDetectedFields.map((field) => (
+                            <span key={field} className="print-forms-detected-field-item">
+                              {`{${field}}`}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="main-panel-actions">
+                    <button
+                      type="button"
+                      className="panel-action-button"
+                      onClick={handleCreatePrintFormTemplate}
+                      disabled={isPrintFormSaving}
+                    >
+                      <span aria-hidden="true">+</span>
+                      <span>{isPrintFormSaving ? "Сохранение..." : "Создать шаблон"}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
+          {isListPage && (
+            <section className="bottom-controls-panel" ref={bottomPanelRef}>
+              <div className="grid-controls">
+                <div className="pagination-controls">
+                  <button
+                    type="button"
+                    className="pager-button"
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                    disabled={employeesLoading || displayedCurrentPage <= 1}
+                    aria-label="Предыдущая страница"
+                    title="Предыдущая страница"
+                  >
+                    ←
+                  </button>
+                  {displayedVisiblePaginationItems.map((item, index) =>
+                    typeof item === "string" && item.startsWith("ellipsis-") ? (
+                      <span key={`ellipsis-${index}`} className="pager-ellipsis" aria-hidden="true">
+                        ...
+                      </span>
+                    ) : (
+                      <button
+                        key={item}
+                        type="button"
+                        className={`pager-button${item === displayedCurrentPage ? " active" : ""}`}
+                        onClick={() => setCurrentPage(item)}
+                        disabled={employeesLoading}
+                      >
+                        {item}
+                      </button>
+                    )
+                  )}
+                  <button
+                    type="button"
+                    className="pager-button"
+                    onClick={() => setCurrentPage((prev) => Math.min(displayedTotalPages, prev + 1))}
+                    disabled={employeesLoading || displayedCurrentPage >= displayedTotalPages}
+                    aria-label="Следующая страница"
+                    title="Следующая страница"
+                  >
+                    →
+                  </button>
+                </div>
+                <label className="page-jump-control">
+                  <span>Перейти на страницу:</span>
+                  <input
+                    ref={pageJumpInputRef}
+                    type="number"
+                    min={1}
+                    max={displayedTotalPages}
+                    defaultValue={displayedCurrentPage}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        goToPage();
+                      }
                     }}
                     disabled={employeesLoading}
+                  />
+                  <button
+                    type="button"
+                    className="page-jump-button"
+                    onClick={goToPage}
+                    disabled={employeesLoading}
                   >
-                    <option value={20}>20</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                  </select>
+                    Перейти
+                  </button>
                 </label>
+                <span className="selected-count-label">Отобрано - {displayedTotalCount} записей</span>
+                <div className="grid-controls-right">
+                  <label className="page-size-control">
+                    <span>Записей на странице:</span>
+                    <select
+                      value={pageSize}
+                      onChange={(event) => {
+                        setPageSize(Number(event.target.value));
+                        setCurrentPage(1);
+                      }}
+                      disabled={employeesLoading}
+                    >
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                  </label>
+                </div>
               </div>
-            </div>
-          </section>
-        )}
+            </section>
+          )}
+        </section>
         <TableColumnSettingsPanel
           isOpen={isColumnSettingsOpen}
           title="Настройка столбцов"
@@ -12558,6 +17157,27 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
             </div>
           </div>
         )}
+        {pendingOrganizationDelete && (
+          <div className="modal-overlay" role="presentation">
+            <div className="modal" role="dialog" aria-modal="true" aria-label="Удаление организации">
+              <p className="result-message">
+                Удалить организацию{pendingOrganizationDelete.name ? ` "${pendingOrganizationDelete.name}"` : ""}?
+              </p>
+              <div className="confirm-actions">
+                <button type="button" className="modal-close-button" onClick={confirmDeleteOrganization}>
+                  Да
+                </button>
+                <button
+                  type="button"
+                  className="modal-close-button secondary"
+                  onClick={closeDeleteOrganizationModal}
+                >
+                  Нет
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         {pendingReportDelete && (
           <div className="modal-overlay" role="presentation">
             <div className="modal" role="dialog" aria-modal="true" aria-label="Удаление отчета">
@@ -12565,7 +17185,7 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
                 Удалить отчет{pendingReportDelete.name ? ` "${pendingReportDelete.name}"` : ""}?
               </p>
               <p className="result-message">
-                Будут удалены связанные записи из report_access_group, report_template_organizations и report_templates.
+                Будут удалены связанные записи из report_access_group, report_template_organizations, report_template_recipients и report_templates.
               </p>
               <div className="confirm-actions">
                 <button
@@ -12637,6 +17257,7 @@ const REPORT_SQL_EDITOR_LINE_HEIGHT_PX = 18;
         {buttonTooltip.visible && (
           <div
             className="custom-button-tooltip"
+            ref={buttonTooltipElementRef}
             style={{ left: `${buttonTooltip.x}px`, top: `${buttonTooltip.y}px` }}
           >
             {buttonTooltip.text}

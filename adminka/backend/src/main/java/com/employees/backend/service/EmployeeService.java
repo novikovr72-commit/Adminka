@@ -393,9 +393,9 @@ public class EmployeeService {
             List<Object> pagedParams = new ArrayList<>(params);
             pagedParams.add(limit);
             pagedParams.add(sqlOffset);
-            List<Map<String, Object>> items = employeeRepository.queryForList(dataSql, pagedParams.toArray());
+            List<Map<String, Object>> items = employeeRepository.queryForNamedListByArgs(dataSql, pagedParams.toArray());
             fillEmployeePositions(items);
-            Integer totalCount = employeeRepository.queryForObject(countSql, Integer.class, params.toArray());
+            Integer totalCount = employeeRepository.queryForNamedObjectByArgs(countSql, Integer.class, params.toArray());
             return ResponseEntity.ok(mapOf(
                 "ok", true,
                 "items", items,
@@ -660,7 +660,7 @@ public class EmployeeService {
 
         try {
             LinkedHashMap<String, String> reportFilters = collectEmployeeReportFilters(body, sorts);
-            List<Map<String, Object>> rows = employeeRepository.queryForList(sql, params.toArray());
+            List<Map<String, Object>> rows = employeeRepository.queryForNamedListByArgs(sql, params.toArray());
             byte[] excel = buildExcelFromRowsWithFilters(
                 "Employees",
                 columnsResult.columns(),
@@ -851,7 +851,7 @@ public class EmployeeService {
             """.formatted(String.join(" and ", where));
 
         try {
-            List<Map<String, Object>> items = employeeRepository.queryForList(sql, params.toArray());
+            List<Map<String, Object>> items = employeeRepository.queryForNamedListByArgs(sql, params.toArray());
             return ResponseEntity.ok(mapOf(
                 "ok", true,
                 "items", items
@@ -917,7 +917,7 @@ public class EmployeeService {
             """.formatted(String.join(" and ", where));
 
         try {
-            List<Map<String, Object>> items = employeeRepository.queryForList(sql, params.toArray());
+            List<Map<String, Object>> items = employeeRepository.queryForNamedListByArgs(sql, params.toArray());
             return ResponseEntity.ok(mapOf(
                 "ok", true,
                 "items", items
@@ -964,17 +964,16 @@ public class EmployeeService {
         }
 
         try {
-            Integer duplicateEmailCount = employeeRepository.queryForObject(
+            Integer duplicateEmailCount = employeeRepository.queryForNamedObject(
                 """
                 select count(*)::int
                 from party.employee e
                 where e.deleted = false
-                  and lower(e.email) = lower(?)
-                  and e.id <> ?::uuid
+                  and lower(e.email) = lower(:email)
+                  and e.id <> cast(:employeeId as uuid)
                 """,
                 Integer.class,
-                email,
-                employeeId
+                new EmployeeEmailCheckParams(employeeId, email)
             );
             if (duplicateEmailCount != null && duplicateEmailCount > 0) {
                 return ResponseEntity.status(HttpStatus.CONFLICT).body(mapOf(
@@ -1016,33 +1015,35 @@ public class EmployeeService {
         }
 
         try {
-            int updatedCount = employeeRepository.update(
+            int updatedCount = employeeRepository.updateNamed(
                 """
                 update party.employee
                 set
-                  surname = ?,
-                  first_name = ?,
-                  middle_name = ?,
-                  full_name = coalesce(?, ''),
-                  email = ?,
-                  phone_number = ?,
-                  sap_id = ?,
-                  personal_number = ?,
-                  status = ?,
+                  surname = :surname,
+                  first_name = :firstName,
+                  middle_name = :middleName,
+                  full_name = coalesce(:fullName, ''),
+                  email = :email,
+                  phone_number = :phoneNumber,
+                  sap_id = :sapId,
+                  personal_number = :personalNumber,
+                  status = :status,
                   updated_at = now()
-                where id = ?::uuid
+                where id = cast(:employeeId as uuid)
                   and deleted = false
                 """,
-                surname,
-                firstName,
-                middleName,
-                fullName,
-                email,
-                phoneNumber,
-                sapId,
-                personalNumber,
-                status,
-                employeeId
+                new EmployeeUpdateParams(
+                    employeeId,
+                    surname,
+                    firstName,
+                    middleName,
+                    fullName,
+                    email,
+                    phoneNumber,
+                    sapId,
+                    personalNumber,
+                    status
+                )
             );
             if (updatedCount == 0) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf(
@@ -1051,7 +1052,7 @@ public class EmployeeService {
                 ));
             }
 
-            Map<String, Object> item = employeeRepository.queryForMap(
+            Map<String, Object> item = employeeRepository.queryForNamedMap(
                 """
                 select
                   e.id::text as id,
@@ -1065,11 +1066,11 @@ public class EmployeeService {
                   e.personal_number,
                   e.status
                 from party.employee e
-                where e.id = ?::uuid
+                where e.id = cast(:employeeId as uuid)
                   and e.deleted = false
                 limit 1
                 """,
-                employeeId
+                new EmployeeIdParams(employeeId)
             );
 
             return ResponseEntity.ok(mapOf(
@@ -1135,15 +1136,15 @@ public class EmployeeService {
         }
 
         try {
-            Integer duplicateEmailCount = employeeRepository.queryForObject(
+            Integer duplicateEmailCount = employeeRepository.queryForNamedObject(
                 """
                 select count(*)::int
                 from party.employee e
                 where e.deleted = false
-                  and lower(e.email) = lower(?)
+                  and lower(e.email) = lower(:email)
                 """,
                 Integer.class,
-                email
+                new EmployeeEmailOnlyParams(email)
             );
             if (duplicateEmailCount != null && duplicateEmailCount > 0) {
                 return ResponseEntity.status(HttpStatus.CONFLICT).body(mapOf(
@@ -1152,7 +1153,7 @@ public class EmployeeService {
                 ));
             }
 
-            String employeeId = employeeRepository.queryForObject(
+            String employeeId = employeeRepository.queryForNamedObject(
                 """
                 insert into party.employee (
                   sap_id,
@@ -1166,22 +1167,35 @@ public class EmployeeService {
                   status,
                   deleted
                 )
-                values (?, coalesce(?, ''), ?, ?, ?, ?, ?, ?, ?, false)
+                values (
+                  :sapId,
+                  coalesce(:fullName, ''),
+                  :email,
+                  :personalNumber,
+                  :firstName,
+                  :surname,
+                  :middleName,
+                  :phoneNumber,
+                  :status,
+                  false
+                )
                 returning id::text
                 """,
                 String.class,
-                sapId,
-                fullName,
-                email,
-                personalNumber,
-                firstName,
-                surname,
-                middleName,
-                phoneNumber,
-                status
+                new EmployeeCreateParams(
+                    sapId,
+                    fullName,
+                    email,
+                    personalNumber,
+                    firstName,
+                    surname,
+                    middleName,
+                    phoneNumber,
+                    status
+                )
             );
 
-            Map<String, Object> item = employeeRepository.queryForMap(
+            Map<String, Object> item = employeeRepository.queryForNamedMap(
                 """
                 select
                   e.id::text as id,
@@ -1195,11 +1209,11 @@ public class EmployeeService {
                   e.personal_number,
                   e.status
                 from party.employee e
-                where e.id = ?::uuid
+                where e.id = cast(:employeeId as uuid)
                   and e.deleted = false
                 limit 1
                 """,
-                employeeId
+                new EmployeeIdParams(employeeId)
             );
 
             return ResponseEntity.status(HttpStatus.CREATED).body(mapOf(
@@ -1221,15 +1235,15 @@ public class EmployeeService {
         }
 
         try {
-            Integer existingEmployeeCount = employeeRepository.queryForObject(
+            Integer existingEmployeeCount = employeeRepository.queryForNamedObject(
                 """
                 select count(*)::int
                 from party.employee e
-                where e.id = ?::uuid
+                where e.id = cast(:employeeId as uuid)
                   and e.deleted = false
                 """,
                 Integer.class,
-                employeeId
+                new EmployeeIdParams(employeeId)
             );
             if (existingEmployeeCount == null || existingEmployeeCount == 0) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf(
@@ -1238,17 +1252,17 @@ public class EmployeeService {
                 ));
             }
 
-            Integer usedAsBossCount = employeeRepository.queryForObject(
+            Integer usedAsBossCount = employeeRepository.queryForNamedObject(
                 """
                 select count(*)::int
                 from party.emp_pos_empl_org_unit eou
                 join party.employee e on e.id = eou.employee_id
                 where eou.deleted = false
                   and e.deleted = false
-                  and eou.parent_id = ?::uuid
+                  and eou.parent_id = cast(:employeeId as uuid)
                 """,
                 Integer.class,
-                employeeId
+                new EmployeeIdParams(employeeId)
             );
             if (usedAsBossCount != null && usedAsBossCount > 0) {
                 return ResponseEntity.status(HttpStatus.CONFLICT).body(mapOf(
@@ -1257,34 +1271,33 @@ public class EmployeeService {
                 ));
             }
 
-            int deletedRelationsCount = employeeRepository.update(
+            int deletedRelationsCount = employeeRepository.updateNamed(
                 """
                 delete from party.relation
-                where employee_id = ?::uuid
+                where employee_id = cast(:employeeId as uuid)
                 """,
-                employeeId
+                new EmployeeIdParams(employeeId)
             );
 
-            int deletedSubordinationCount = employeeRepository.update(
+            int deletedSubordinationCount = employeeRepository.updateNamed(
                 """
                 delete from party.emp_pos_empl_org_unit
-                where employee_id = ?::uuid
-                   or parent_id = ?::uuid
+                where employee_id = cast(:employeeId as uuid)
+                   or parent_id = cast(:employeeId as uuid)
                 """,
-                employeeId,
-                employeeId
+                new EmployeeIdParams(employeeId)
             );
 
-            int deletedCount = employeeRepository.update(
+            int deletedCount = employeeRepository.updateNamed(
                 """
                 update party.employee
                 set
                   deleted = true,
                   updated_at = now()
-                where id = ?::uuid
+                where id = cast(:employeeId as uuid)
                   and deleted = false
                 """,
-                employeeId
+                new EmployeeIdParams(employeeId)
             );
             if (deletedCount == 0) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf(
@@ -1314,12 +1327,12 @@ public class EmployeeService {
         }
 
         try {
-            int deletedCount = employeeRepository.update(
+            int deletedCount = employeeRepository.updateNamed(
                 """
                 delete from party.emp_pos_empl_org_unit
-                where id = ?::uuid
+                where id = cast(:employeeOrganId as uuid)
                 """,
-                normalizedEmployeeOrganId
+                new EmployeeOrganIdParams(normalizedEmployeeOrganId)
             );
             if (deletedCount == 0) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf(
@@ -1368,17 +1381,21 @@ public class EmployeeService {
 
         try {
             String parentEmployeeOrganId = bossEmployeeId;
-            Integer duplicateCount = employeeRepository.queryForObject(
+            Integer duplicateCount = employeeRepository.queryForNamedObject(
                 """
                 select count(*)::int
                 from party.emp_pos_empl_org_unit eou
                 where eou.deleted = false
-                  and eou.employee_id = ?::uuid
-                  and eou.organ_unit_id = ?::uuid
+                  and eou.employee_id = cast(:employeeId as uuid)
+                  and eou.organ_unit_id = cast(:organUnitId as uuid)
                 """,
                 Integer.class,
-                employeeId,
-                organUnitId
+                new EmployeePositionCreateParams(
+                    employeeId,
+                    organUnitId,
+                    employeePositionId,
+                    parentEmployeeOrganId
+                )
             );
             if (duplicateCount != null && duplicateCount > 0) {
                 return ResponseEntity.status(HttpStatus.CONFLICT).body(mapOf(
@@ -1387,7 +1404,7 @@ public class EmployeeService {
                 ));
             }
 
-            String employeeOrganId = employeeRepository.queryForObject(
+            String employeeOrganId = employeeRepository.queryForNamedObject(
                 """
                 insert into party.emp_pos_empl_org_unit (
                   employee_id,
@@ -1395,14 +1412,21 @@ public class EmployeeService {
                   employee_position_id,
                   parent_id
                 )
-                values (?::uuid, ?::uuid, ?::uuid, ?::uuid)
+                values (
+                  cast(:employeeId as uuid),
+                  cast(:organUnitId as uuid),
+                  cast(:employeePositionId as uuid),
+                  cast(:parentId as uuid)
+                )
                 returning id::text
                 """,
                 String.class,
-                employeeId,
-                organUnitId,
-                employeePositionId,
-                parentEmployeeOrganId
+                new EmployeePositionCreateParams(
+                    employeeId,
+                    organUnitId,
+                    employeePositionId,
+                    parentEmployeeOrganId
+                )
             );
 
             Map<String, Object> item = loadEmployeePositionItem(employeeOrganId);
@@ -1457,19 +1481,23 @@ public class EmployeeService {
 
         try {
             String parentEmployeeOrganId = bossEmployeeId;
-            Integer duplicateCount = employeeRepository.queryForObject(
+            Integer duplicateCount = employeeRepository.queryForNamedObject(
                 """
                 select count(*)::int
                 from party.emp_pos_empl_org_unit eou
                 where eou.deleted = false
-                  and eou.employee_id = ?::uuid
-                  and eou.organ_unit_id = ?::uuid
-                  and eou.id <> ?::uuid
+                  and eou.employee_id = cast(:employeeId as uuid)
+                  and eou.organ_unit_id = cast(:organUnitId as uuid)
+                  and eou.id <> cast(:employeeOrganId as uuid)
                 """,
                 Integer.class,
-                employeeId,
-                organUnitId,
-                employeeOrganId
+                new EmployeePositionUpdateParams(
+                    employeeOrganId,
+                    employeeId,
+                    organUnitId,
+                    employeePositionId,
+                    parentEmployeeOrganId
+                )
             );
             if (duplicateCount != null && duplicateCount > 0) {
                 return ResponseEntity.status(HttpStatus.CONFLICT).body(mapOf(
@@ -1478,23 +1506,25 @@ public class EmployeeService {
                 ));
             }
 
-            int updatedCount = employeeRepository.update(
+            int updatedCount = employeeRepository.updateNamed(
                 """
                 update party.emp_pos_empl_org_unit
                 set
-                  employee_id = ?::uuid,
-                  organ_unit_id = ?::uuid,
-                  employee_position_id = ?::uuid,
-                  parent_id = ?::uuid,
+                  employee_id = cast(:employeeId as uuid),
+                  organ_unit_id = cast(:organUnitId as uuid),
+                  employee_position_id = cast(:employeePositionId as uuid),
+                  parent_id = cast(:parentId as uuid),
                   updated_at = now()
-                where id = ?::uuid
+                where id = cast(:employeeOrganId as uuid)
                   and deleted = false
                 """,
-                employeeId,
-                organUnitId,
-                employeePositionId,
-                parentEmployeeOrganId,
-                employeeOrganId
+                new EmployeePositionUpdateParams(
+                    employeeOrganId,
+                    employeeId,
+                    organUnitId,
+                    employeePositionId,
+                    parentEmployeeOrganId
+                )
             );
             if (updatedCount == 0) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf(
@@ -1514,7 +1544,7 @@ public class EmployeeService {
     }
 
     private Map<String, Object> loadEmployeePositionItem(String employeeOrganId) {
-        return employeeRepository.queryForMap(
+        return employeeRepository.queryForNamedMap(
             """
             with recursive chain as (
               select
@@ -1523,7 +1553,7 @@ public class EmployeeService {
                 coalesce(ou.sh_name, ou.name) as sh_name
               from party.emp_pos_empl_org_unit eou
               join party.organ_unit ou on ou.id = eou.organ_unit_id and ou.deleted = false
-              where eou.id = ?::uuid
+              where eou.id = cast(:employeeOrganId as uuid)
                 and eou.deleted = false
               union all
               select
@@ -1568,12 +1598,11 @@ public class EmployeeService {
             ) addr on true
             left join party.employee_position ep on ep.id = eou.employee_position_id and ep.deleted = false
             left join party.employee boss on boss.id = eou.parent_id and boss.deleted = false
-            where eou.id = ?::uuid
+            where eou.id = cast(:employeeOrganId as uuid)
               and eou.deleted = false
             limit 1
             """,
-            employeeOrganId,
-            employeeOrganId
+            new EmployeeOrganIdParams(employeeOrganId)
         );
     }
 
@@ -1980,7 +2009,7 @@ public class EmployeeService {
 
         List<Object> sqlParams = new ArrayList<>(employeeIds);
         sqlParams.addAll(employeeIds);
-        List<Map<String, Object>> rows = employeeRepository.queryForList(sql, sqlParams.toArray());
+        List<Map<String, Object>> rows = employeeRepository.queryForNamedListByArgs(sql, sqlParams.toArray());
         Map<String, List<Map<String, Object>>> positionsByEmployee = new HashMap<>();
         for (Map<String, Object> row : rows) {
             String employeeId = String.valueOf(row.get("employee_id"));
@@ -2302,6 +2331,65 @@ public class EmployeeService {
     }
 
     private record PendingEmployeeRow(int rowNumber, String email, ValidRowData data) {
+    }
+
+    private record EmployeeIdParams(String employeeId) {
+    }
+
+    private record EmployeeOrganIdParams(String employeeOrganId) {
+    }
+
+    private record EmployeeEmailOnlyParams(String email) {
+    }
+
+    private record EmployeeEmailCheckParams(
+        String employeeId,
+        String email
+    ) {
+    }
+
+    private record EmployeeUpdateParams(
+        String employeeId,
+        String surname,
+        String firstName,
+        String middleName,
+        String fullName,
+        String email,
+        String phoneNumber,
+        String sapId,
+        Integer personalNumber,
+        String status
+    ) {
+    }
+
+    private record EmployeeCreateParams(
+        String sapId,
+        String fullName,
+        String email,
+        Integer personalNumber,
+        String firstName,
+        String surname,
+        String middleName,
+        String phoneNumber,
+        String status
+    ) {
+    }
+
+    private record EmployeePositionCreateParams(
+        String employeeId,
+        String organUnitId,
+        String employeePositionId,
+        String parentId
+    ) {
+    }
+
+    private record EmployeePositionUpdateParams(
+        String employeeOrganId,
+        String employeeId,
+        String organUnitId,
+        String employeePositionId,
+        String parentId
+    ) {
     }
 
     private record ParseResult(Integer value, String error) {

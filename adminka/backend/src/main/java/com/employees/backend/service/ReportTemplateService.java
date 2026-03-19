@@ -13,12 +13,16 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 @Service
 public class ReportTemplateService {
+    private static final Pattern EMAIL_PATTERN = Pattern.compile(
+        "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$"
+    );
     private static final Set<String> ALLOWED_SORT_DIRECTIONS = Set.of("ASC", "DESC");
     private static final Set<String> REPORT_TEMPLATE_SORT_FIELDS = Set.of(
         "code_report", "name", "output_file_name", "output_file_type", "version", "status", "method"
@@ -141,7 +145,70 @@ public class ReportTemplateService {
         String whereSql = "where " + String.join(" and ", where);
         String orderBy = buildReportTemplateOrderBy(sorts);
 
-        String dataSql = """
+        String dataSqlWithRecipients = """
+            select
+              rt.id::text as report_template_id,
+              rt.code_report as code_report,
+              rt.name as name,
+              rt.output_file_name as output_file_name,
+              rt.output_file_type as output_file_type,
+              rt.version as version,
+              rt.status as status,
+              rt.method as method,
+              rt.number_days as number_days,
+              rt.sql_query as sql_query,
+              rt.report_info as report_info,
+              coalesce((
+                select jsonb_agg(
+                  jsonb_build_object(
+                    'organUnitId', organization_item.organ_unit_id,
+                    'organUnitName', organization_item.organ_unit_name
+                  )
+                  order by organization_item.organ_unit_name, organization_item.organ_unit_id
+                )
+                from (
+                  select distinct
+                    rto.claim_organization_id::text as organ_unit_id,
+                    coalesce(ou.sh_name, '') as organ_unit_name
+                  from public.report_template_organizations rto
+                  left join party.organ_unit ou
+                    on ou.id = rto.claim_organization_id
+                  where rto.report_template_id = rt.id
+                ) organization_item
+              ), '[]'::jsonb)::text as organizations,
+              coalesce((
+                select jsonb_agg(
+                  jsonb_build_object('codeAccess', access_item.code_access)
+                  order by access_item.code_access
+                )
+                from (
+                  select distinct
+                    rag.code_access as code_access
+                  from public.report_access_group rag
+                  where rag.report_template_id = rt.id
+                    and rag.code_access is not null
+                ) access_item
+              ), '[]'::jsonb)::text as access_groups,
+              coalesce((
+                select jsonb_agg(
+                  jsonb_build_object('email', recipient_item.email)
+                  order by recipient_item.email
+                )
+                from (
+                  select distinct
+                    rtr.email as email
+                  from public.report_template_recipients rtr
+                  where rtr.report_template_id = rt.id
+                    and rtr.email is not null
+                ) recipient_item
+              ), '[]'::jsonb)::text as recipients
+            from public.report_templates rt
+            %s
+            order by %s
+            limit ?
+            offset ?
+            """.formatted(whereSql, orderBy);
+        String dataSqlWithoutRecipients = """
             select
               rt.id::text as report_template_id,
               rt.code_report as code_report,
@@ -201,7 +268,20 @@ public class ReportTemplateService {
             List<Object> pagedParams = new ArrayList<>(params);
             pagedParams.add(limit);
             pagedParams.add(sqlOffset);
-            List<Map<String, Object>> rawItems = reportTemplateRepository.queryForList(dataSql, pagedParams.toArray());
+            List<Map<String, Object>> rawItems;
+            boolean recipientsAvailable = true;
+            try {
+                rawItems = reportTemplateRepository.queryForNamedListByArgs(dataSqlWithRecipients, pagedParams.toArray());
+            } catch (Exception exception) {
+                if (!isMissingRecipientsTableException(exception)) {
+                    throw exception;
+                }
+                rawItems = reportTemplateRepository.queryForNamedListByArgs(
+                    dataSqlWithoutRecipients,
+                    pagedParams.toArray()
+                );
+                recipientsAvailable = false;
+            }
             List<Map<String, Object>> items = new ArrayList<>(rawItems.size());
             for (Map<String, Object> item : rawItems) {
                 LinkedHashMap<String, Object> mapped = new LinkedHashMap<>();
@@ -218,9 +298,17 @@ public class ReportTemplateService {
                 mapped.put("reportInfo", item.get("report_info"));
                 mapped.put("organizations", parseJsonArrayOfObjects(item.get("organizations")));
                 mapped.put("accessGroups", parseJsonArrayOfObjects(item.get("access_groups")));
+                mapped.put(
+                    "recipients",
+                    recipientsAvailable ? parseJsonArrayOfObjects(item.get("recipients")) : List.of()
+                );
                 items.add(mapped);
             }
-            Integer totalCount = reportTemplateRepository.queryForObject(countSql, Integer.class, params.toArray());
+            Integer totalCount = reportTemplateRepository.queryForNamedObjectByArgs(
+                countSql,
+                Integer.class,
+                params.toArray()
+            );
             return ResponseEntity.ok(mapOf(
                 "ok", true,
                 "items", items,
@@ -313,7 +401,8 @@ public class ReportTemplateService {
                     "sqlQuery", "",
                     "reportInfo", Map.of(),
                     "organizations", List.of(),
-                    "accessGroups", List.of()
+                    "accessGroups", List.of(),
+                    "recipients", List.of()
                 )
             ));
         } catch (Exception exception) {
@@ -401,6 +490,9 @@ public class ReportTemplateService {
             }
             int deletedAccessGroups = reportTemplateRepository.deleteAccessGroupsByTemplateId(normalizedReportTemplateId);
             int deletedOrganizations = reportTemplateRepository.deleteOrganizationsByTemplateId(normalizedReportTemplateId);
+            int deletedRecipients = reportTemplateRepository.recipientsTableExists()
+                ? reportTemplateRepository.deleteRecipientsByTemplateId(normalizedReportTemplateId)
+                : 0;
             int deletedTemplates = reportTemplateRepository.deleteTemplateById(normalizedReportTemplateId);
             if (deletedTemplates == 0) {
                 return badRequest("Шаблон отчета не найден");
@@ -410,6 +502,7 @@ public class ReportTemplateService {
                 "deletedReportTemplateId", normalizedReportTemplateId,
                 "deletedAccessGroups", deletedAccessGroups,
                 "deletedOrganizations", deletedOrganizations,
+                "deletedRecipients", deletedRecipients,
                 "deletedTemplates", deletedTemplates
             ));
         } catch (Exception exception) {
@@ -580,6 +673,94 @@ public class ReportTemplateService {
         }
     }
 
+    public ResponseEntity<Map<String, Object>> addReportTemplateRecipient(
+        String reportTemplateId,
+        Map<String, Object> rawBody
+    ) {
+        String normalizedReportTemplateId = normalizeText(reportTemplateId);
+        if (normalizedReportTemplateId == null) {
+            return badRequest("Параметр reportTemplateId обязателен");
+        }
+        if (!isUuid(normalizedReportTemplateId)) {
+            return badRequest("Параметр reportTemplateId должен быть UUID");
+        }
+        Map<String, Object> body = normalizeRequestBody(rawBody);
+        String email = normalizeText(body.get("email"));
+        if (email == null) {
+            return badRequest("Параметр email обязателен");
+        }
+        String normalizedEmail = email.toLowerCase(Locale.ROOT);
+        if (!EMAIL_PATTERN.matcher(normalizedEmail).matches()) {
+            return badRequest("Параметр email должен быть корректным email-адресом");
+        }
+        if (!reportTemplateRepository.recipientsTableExists()) {
+            return badRequest("Таблица report_template_recipients не создана. Примените SQL-миграцию.");
+        }
+        try {
+            int templateExists = reportTemplateRepository.countActiveTemplateById(normalizedReportTemplateId);
+            if (templateExists == 0) {
+                return badRequest("Шаблон отчета не найден");
+            }
+            int insertedCount = reportTemplateRepository.insertRecipientIfAbsent(
+                normalizedReportTemplateId,
+                normalizedEmail
+            );
+            if (insertedCount == 0) {
+                return badRequest("Получатель отчета уже существует");
+            }
+            return ResponseEntity.ok(mapOf(
+                "ok", true,
+                "item", mapOf(
+                    "email", normalizedEmail
+                )
+            ));
+        } catch (Exception exception) {
+            return serverError(exception, "Внутренняя ошибка добавления");
+        }
+    }
+
+    public ResponseEntity<Map<String, Object>> deleteReportTemplateRecipient(
+        String reportTemplateId,
+        String email
+    ) {
+        String normalizedReportTemplateId = normalizeText(reportTemplateId);
+        if (normalizedReportTemplateId == null) {
+            return badRequest("Параметр reportTemplateId обязателен");
+        }
+        if (!isUuid(normalizedReportTemplateId)) {
+            return badRequest("Параметр reportTemplateId должен быть UUID");
+        }
+        String normalizedEmail = normalizeText(email);
+        if (normalizedEmail == null) {
+            return badRequest("Параметр email обязателен");
+        }
+        normalizedEmail = normalizedEmail.toLowerCase(Locale.ROOT);
+        if (!EMAIL_PATTERN.matcher(normalizedEmail).matches()) {
+            return badRequest("Параметр email должен быть корректным email-адресом");
+        }
+        if (!reportTemplateRepository.recipientsTableExists()) {
+            return badRequest("Таблица report_template_recipients не создана. Примените SQL-миграцию.");
+        }
+        try {
+            int deletedCount = reportTemplateRepository.deleteRecipientLink(
+                normalizedReportTemplateId,
+                normalizedEmail
+            );
+            if (deletedCount == 0) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf(
+                    "ok", false,
+                    "error", "Получатель отчета не найден"
+                ));
+            }
+            return ResponseEntity.ok(mapOf(
+                "ok", true,
+                "deletedCount", deletedCount
+            ));
+        } catch (Exception exception) {
+            return serverError(exception, "Внутренняя ошибка удаления");
+        }
+    }
+
     public ResponseEntity<Map<String, Object>> reportTemplateSettingsGet(String reportTemplateId) {
         String normalizedReportTemplateId = normalizeText(reportTemplateId);
         if (normalizedReportTemplateId == null) {
@@ -589,7 +770,17 @@ public class ReportTemplateService {
             return badRequest("Параметр reportTemplateId должен быть UUID");
         }
         try {
-            List<Map<String, Object>> templates = reportTemplateRepository.findTemplateSettingsById(normalizedReportTemplateId);
+            List<Map<String, Object>> templates;
+            boolean recipientsAvailable = true;
+            try {
+                templates = reportTemplateRepository.findTemplateSettingsById(normalizedReportTemplateId);
+            } catch (Exception exception) {
+                if (!isMissingRecipientsTableException(exception)) {
+                    throw exception;
+                }
+                templates = reportTemplateRepository.findTemplateSettingsByIdWithoutRecipients(normalizedReportTemplateId);
+                recipientsAvailable = false;
+            }
             if (templates.isEmpty()) {
                 return badRequest("Шаблон отчета не найден");
             }
@@ -607,6 +798,7 @@ public class ReportTemplateService {
                     "name", template.get("name"),
                     "reportInfo", reportInfo,
                     "reportInfoJson", reportInfoJson,
+                    "recipients", recipientsAvailable ? parseJsonArrayOfObjects(template.get("recipients")) : List.of(),
                     "reportLogoBase64", template.get("report_logo_base64"),
                     "reportLogoMimeType", template.get("report_logo_mime_type")
                 )
@@ -859,6 +1051,15 @@ public class ReportTemplateService {
         }
         String text = String.valueOf(value).trim();
         return text.isEmpty() ? null : text;
+    }
+
+    private boolean isMissingRecipientsTableException(Exception exception) {
+        String message = normalizeText(exception == null ? null : exception.getMessage());
+        if (message == null) {
+            return false;
+        }
+        String lower = message.toLowerCase(Locale.ROOT);
+        return lower.contains("report_template_recipients");
     }
 
     private Map<String, Object> normalizeRequestBody(Map<String, Object> rawBody) {

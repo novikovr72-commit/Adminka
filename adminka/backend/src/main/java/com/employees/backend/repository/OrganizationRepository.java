@@ -2,49 +2,71 @@ package com.employees.backend.repository;
 
 import java.util.List;
 import java.util.Map;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.BeanPropertyRowMapper;
+import org.springframework.jdbc.core.namedparam.BeanPropertySqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 @Repository
 public class OrganizationRepository {
-    private final JdbcTemplate jdbcTemplate;
+    private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
 
-    public OrganizationRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    public OrganizationRepository(NamedParameterJdbcTemplate namedParameterJdbcTemplate) {
+        this.namedParameterJdbcTemplate = namedParameterJdbcTemplate;
     }
 
-    public List<Map<String, Object>> queryForList(String sql, Object... args) {
-        return jdbcTemplate.queryForList(sql, args);
+    public List<Map<String, Object>> queryForNamedListByArgs(String sql, Object... args) {
+        PositionalSqlAdapter.SqlWithParams prepared = PositionalSqlAdapter.prepare(sql, args);
+        return namedParameterJdbcTemplate.queryForList(prepared.sql(), prepared.params());
     }
 
-    public int update(String sql, Object... args) {
-        return jdbcTemplate.update(sql, args);
+    public List<Map<String, Object>> queryForNamedList(String sql, Object beanParams) {
+        return namedParameterJdbcTemplate.queryForList(sql, params(beanParams));
     }
 
-    public <T> T queryForObject(String sql, Class<T> requiredType, Object... args) {
-        return jdbcTemplate.queryForObject(sql, requiredType, args);
+    public int updateNamedByArgs(String sql, Object... args) {
+        PositionalSqlAdapter.SqlWithParams prepared = PositionalSqlAdapter.prepare(sql, args);
+        return namedParameterJdbcTemplate.update(prepared.sql(), prepared.params());
     }
 
-    public Map<String, Object> queryForMap(String sql, Object... args) {
-        return jdbcTemplate.queryForMap(sql, args);
+    public int updateNamed(String sql, Object beanParams) {
+        return namedParameterJdbcTemplate.update(sql, params(beanParams));
+    }
+
+    public <T> T queryForNamedObjectByArgs(String sql, Class<T> requiredType, Object... args) {
+        PositionalSqlAdapter.SqlWithParams prepared = PositionalSqlAdapter.prepare(sql, args);
+        return namedParameterJdbcTemplate.queryForObject(prepared.sql(), prepared.params(), requiredType);
+    }
+
+    public <T> T queryForNamedObject(String sql, Class<T> requiredType, Object beanParams) {
+        return namedParameterJdbcTemplate.queryForObject(sql, params(beanParams), requiredType);
+    }
+
+    public Map<String, Object> queryForNamedMapByArgs(String sql, Object... args) {
+        PositionalSqlAdapter.SqlWithParams prepared = PositionalSqlAdapter.prepare(sql, args);
+        return namedParameterJdbcTemplate.queryForMap(prepared.sql(), prepared.params());
+    }
+
+    public Map<String, Object> queryForNamedMap(String sql, Object beanParams) {
+        return namedParameterJdbcTemplate.queryForMap(sql, params(beanParams));
     }
 
     public int countActiveOrganizationById(String organUnitId) {
-        Integer value = jdbcTemplate.queryForObject(
+        Integer value = namedParameterJdbcTemplate.queryForObject(
             """
             select count(*)::int
             from party.organ_unit ou
-            where ou.id = ?::uuid
+            where ou.id = cast(:organUnitId as uuid)
               and ou.deleted = false
             """,
-            Integer.class,
-            organUnitId
+            params(new OrganizationIdParams(organUnitId)),
+            Integer.class
         );
         return value == null ? 0 : value;
     }
 
     public List<Map<String, Object>> loadOrganizationReferenceCandidates() {
-        return jdbcTemplate.queryForList(
+        return namedParameterJdbcTemplate.queryForList(
             """
             select
               c.table_schema,
@@ -73,68 +95,74 @@ public class OrganizationRepository {
               )
             order by c.table_schema, c.table_name, c.column_name
             """
+            ,
+            params(new EmptyParams())
         );
     }
 
     public int countByDynamicReferenceSql(String sql, String organUnitId) {
-        Integer value = jdbcTemplate.queryForObject(sql, Integer.class, organUnitId);
+        Integer value = namedParameterJdbcTemplate.queryForObject(
+            sql,
+            params(new OrganizationIdParams(organUnitId)),
+            Integer.class
+        );
         return value == null ? 0 : value;
     }
 
     public int softDeleteOrganUnitById(String organUnitId) {
-        return jdbcTemplate.update(
+        return namedParameterJdbcTemplate.update(
             """
             update party.organ_unit
             set
               deleted = true,
               updated_at = now()
-            where id = ?::uuid
+            where id = cast(:organUnitId as uuid)
               and deleted = false
             """,
-            organUnitId
+            params(new OrganizationIdParams(organUnitId))
         );
     }
 
     public int softDeleteAddressesByOrganUnitId(String organUnitId) {
-        return jdbcTemplate.update(
+        return namedParameterJdbcTemplate.update(
             """
             update party.address
             set
               deleted = true,
               updated_at = now()
-            where organ_unit_id = ?::uuid
+            where organ_unit_id = cast(:organUnitId as uuid)
               and deleted = false
             """,
-            organUnitId
+            params(new OrganizationIdParams(organUnitId))
         );
     }
 
     public int softDeleteEmailsByOrganUnitId(String organUnitId) {
-        return jdbcTemplate.update(
+        return namedParameterJdbcTemplate.update(
             """
             update party.organ_unit_email
             set
               deleted = true,
               updated_at = now()
-            where organ_unit_id = ?::uuid
+            where organ_unit_id = cast(:organUnitId as uuid)
               and deleted = false
             """,
-            organUnitId
+            params(new OrganizationIdParams(organUnitId))
         );
     }
 
     public int deleteTypeRelationsByOrganUnitId(String organUnitId) {
-        return jdbcTemplate.update(
+        return namedParameterJdbcTemplate.update(
             """
             delete from party.organ_unit_organ_unit_types
-            where organ_unit_id = ?::uuid
+            where organ_unit_id = cast(:organUnitId as uuid)
             """,
-            organUnitId
+            params(new OrganizationIdParams(organUnitId))
         );
     }
 
     public List<Map<String, Object>> findOrganizationDetailsById(String organUnitId) {
-        return jdbcTemplate.queryForList(
+        return namedParameterJdbcTemplate.queryForList(
             """
             select
               ou.id::text as organ_unit_id,
@@ -234,10 +262,25 @@ public class OrganizationRepository {
               where ouot.organ_unit_id = ou.id
             ) as types on true
             where ou.deleted = false
-              and ou.id = ?::uuid
+              and ou.id = cast(:organUnitId as uuid)
             limit 1
             """,
-            organUnitId
+            params(new OrganizationIdParams(organUnitId))
         );
+    }
+
+    public <T> List<T> queryForBeans(String sql, Class<T> beanType, Object... args) {
+        PositionalSqlAdapter.SqlWithParams prepared = PositionalSqlAdapter.prepare(sql, args);
+        return namedParameterJdbcTemplate.query(prepared.sql(), prepared.params(), BeanPropertyRowMapper.newInstance(beanType));
+    }
+
+    private static BeanPropertySqlParameterSource params(Object value) {
+        return new BeanPropertySqlParameterSource(value);
+    }
+
+    private record EmptyParams() {
+    }
+
+    private record OrganizationIdParams(String organUnitId) {
     }
 }

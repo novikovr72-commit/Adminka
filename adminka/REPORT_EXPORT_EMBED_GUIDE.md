@@ -73,6 +73,86 @@
 - PostgreSQL driver
 - Apache POI (`poi-ooxml`)
 
+### Шаг 1.1. Подготовьте схему БД (`report_templates.report_info`)
+
+Для работы макета Excel в таблице `report_templates` должно быть поле `report_info` типа `jsonb`.
+
+DDL:
+
+```sql
+alter table public.report_templates
+  add column if not exists report_info jsonb;
+```
+
+Рекомендуемый default:
+
+```sql
+alter table public.report_templates
+  alter column report_info set default '{}'::jsonb;
+```
+
+Проверка:
+
+```sql
+select column_name, data_type
+from information_schema.columns
+where table_schema = 'public'
+  and table_name = 'report_templates'
+  and column_name = 'report_info';
+```
+
+### Шаг 1.2. Подготовьте все поля `report_templates`, которые использует процедура
+
+Процедура экспорта читает из `report_templates` не только `report_info`, но и набор служебных полей.
+Чтобы интеграция не падала на `column does not exist`, проверьте/добавьте их:
+
+```sql
+alter table public.report_templates
+  add column if not exists sql_query text,
+  add column if not exists method varchar(16),
+  add column if not exists number_days integer,
+  add column if not exists output_file_name text,
+  add column if not exists output_file_type varchar(16),
+  add column if not exists name text,
+  add column if not exists report_logo bytea,
+  add column if not exists deleted boolean;
+```
+
+Рекомендуемые значения по умолчанию:
+
+```sql
+alter table public.report_templates
+  alter column method set default 'AUTO',
+  alter column number_days set default 0,
+  alter column output_file_type set default 'XLSX',
+  alter column deleted set default false;
+```
+
+Проверка полной структуры:
+
+```sql
+select column_name, data_type
+from information_schema.columns
+where table_schema = 'public'
+  and table_name = 'report_templates'
+  and column_name in (
+    'id',
+    'sql_query',
+    'method',
+    'number_days',
+    'output_file_name',
+    'output_file_type',
+    'name',
+    'report_info',
+    'report_logo',
+    'deleted'
+  )
+order by column_name;
+```
+
+Минимальный рабочий фильтр выборки в коде:
+- `where id = :reportTemplateId and deleted = false`
+
 ### Шаг 2. Выберите вариант интеграции
 
 Вариант A (быстрый, рекомендуемый):

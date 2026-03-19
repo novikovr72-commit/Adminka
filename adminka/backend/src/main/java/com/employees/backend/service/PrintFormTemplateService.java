@@ -129,7 +129,7 @@ public class PrintFormTemplateService {
         }
         String id = UUID.randomUUID().toString();
         try {
-            printFormTemplateRepository.update(
+            printFormTemplateRepository.updateNamed(
                 """
                 insert into public.print_form_templates(
                   id,
@@ -143,17 +143,30 @@ public class PrintFormTemplateService {
                   overlay_settings,
                   deleted
                 )
-                values (?::uuid, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, false)
+                values (
+                  cast(:id as uuid),
+                  :code,
+                  :name,
+                  :nameEng,
+                  :description,
+                  :templatePdf,
+                  :dataSql,
+                  cast(:fieldMappingJson as jsonb),
+                  cast(:overlaySettingsJson as jsonb),
+                  false
+                )
                 """,
-                id,
-                code,
-                name,
-                name,
-                description,
-                templatePdf,
-                dataSql,
-                toJson(fieldMapping),
-                toJson(overlaySettings)
+                new CreateTemplateParams(
+                    id,
+                    code,
+                    name,
+                    name,
+                    description,
+                    templatePdf,
+                    dataSql,
+                    toJson(fieldMapping),
+                    toJson(overlaySettings)
+                )
             );
             return ResponseEntity.ok(mapOf("ok", true, "item", mapTemplateForResponse(loadTemplateById(id, true))));
         } catch (Exception exception) {
@@ -257,30 +270,32 @@ public class PrintFormTemplateService {
             return badRequest("Параметр overlaySettings должен быть JSON-объектом");
         }
         try {
-            int updated = printFormTemplateRepository.update(
+            int updated = printFormTemplateRepository.updateNamed(
                 """
                 update public.print_form_templates
-                set code = ?,
-                    name = ?,
-                    name_eng = ?,
-                    description = ?,
-                    template_pdf = ?,
-                    data_sql = ?,
-                    field_mapping = ?::jsonb,
-                    overlay_settings = ?::jsonb,
+                set code = :code,
+                    name = :name,
+                    name_eng = :nameEng,
+                    description = :description,
+                    template_pdf = :templatePdf,
+                    data_sql = :dataSql,
+                    field_mapping = cast(:fieldMappingJson as jsonb),
+                    overlay_settings = cast(:overlaySettingsJson as jsonb),
                     updated_at = now()
-                where id = ?::uuid
+                where id = cast(:templateId as uuid)
                   and deleted = false
                 """,
-                code,
-                name,
-                name,
-                description,
-                templatePdf,
-                dataSql,
-                toJson(fieldMapping),
-                toJson(overlaySettings),
-                normalizedTemplateId
+                new UpdateTemplateParams(
+                    normalizedTemplateId,
+                    code,
+                    name,
+                    name,
+                    description,
+                    templatePdf,
+                    dataSql,
+                    toJson(fieldMapping),
+                    toJson(overlaySettings)
+                )
             );
             if (updated == 0) {
                 return badRequest("Шаблон печатной формы не найден");
@@ -564,6 +579,32 @@ public class PrintFormTemplateService {
             result.put(String.valueOf(values[i]), values[i + 1]);
         }
         return result;
+    }
+
+    private record CreateTemplateParams(
+        String id,
+        String code,
+        String name,
+        String nameEng,
+        String description,
+        byte[] templatePdf,
+        String dataSql,
+        String fieldMappingJson,
+        String overlaySettingsJson
+    ) {
+    }
+
+    private record UpdateTemplateParams(
+        String templateId,
+        String code,
+        String name,
+        String nameEng,
+        String description,
+        byte[] templatePdf,
+        String dataSql,
+        String fieldMappingJson,
+        String overlaySettingsJson
+    ) {
     }
 
 }

@@ -385,7 +385,10 @@ public class OrganizationService {
             List<Object> pagedParams = new ArrayList<>(params);
             pagedParams.add(limit);
             pagedParams.add(sqlOffset);
-            List<Map<String, Object>> rawItems = organizationRepository.queryForList(dataSql, pagedParams.toArray());
+            List<Map<String, Object>> rawItems = organizationRepository.queryForNamedListByArgs(
+                dataSql,
+                pagedParams.toArray()
+            );
             List<Map<String, Object>> items = new ArrayList<>(rawItems.size());
             for (Map<String, Object> item : rawItems) {
                 LinkedHashMap<String, Object> mapped = new LinkedHashMap<>(item);
@@ -409,7 +412,11 @@ public class OrganizationService {
                 mapped.put("organ_unit_type_names", typeNames);
                 items.add(mapped);
             }
-            Integer totalCount = organizationRepository.queryForObject(countSql, Integer.class, params.toArray());
+            Integer totalCount = organizationRepository.queryForNamedObjectByArgs(
+                countSql,
+                Integer.class,
+                params.toArray()
+            );
             return ResponseEntity.ok(mapOf(
                 "ok", true,
                 "items", items,
@@ -446,7 +453,7 @@ public class OrganizationService {
         }
 
         try {
-            List<Map<String, Object>> organizationRows = organizationRepository.queryForList(
+            List<Map<String, Object>> organizationRows = organizationRepository.queryForNamedListByArgs(
                 """
                 select
                   ou.id::text as organ_unit_id,
@@ -540,7 +547,7 @@ public class OrganizationService {
 
             Map<String, Object> firstSuggestion = suggestions.get(0);
             String dataInfoJson = objectMapper.writeValueAsString(firstSuggestion);
-            organizationRepository.update(
+            organizationRepository.updateNamedByArgs(
                 """
                 update party.organ_unit
                 set
@@ -680,7 +687,7 @@ public class OrganizationService {
 
         try {
             LinkedHashMap<String, String> reportFilters = collectOrganizationReportFilters(body, sorts);
-            List<Map<String, Object>> rows = organizationRepository.queryForList(sql, params.toArray());
+            List<Map<String, Object>> rows = organizationRepository.queryForNamedListByArgs(sql, params.toArray());
             byte[] excel = buildExcelFromRowsWithFilters(
                 "Organizations",
                 columnsResult.columns(),
@@ -756,7 +763,7 @@ public class OrganizationService {
             """.formatted(String.join(" and ", where));
 
         try {
-            List<Map<String, Object>> items = organizationRepository.queryForList(sql, params.toArray());
+            List<Map<String, Object>> items = organizationRepository.queryForNamedListByArgs(sql, params.toArray());
 
             if (!items.isEmpty()) {
                 List<String> organizationIds = new ArrayList<>();
@@ -800,7 +807,7 @@ public class OrganizationService {
                         order by root_id collate "C", sh_name collate "C", id collate "C"
                         """.formatted(placeholders);
                     List<Map<String, Object>> departmentRows =
-                        organizationRepository.queryForList(departmentsSql, organizationIds.toArray());
+                        organizationRepository.queryForNamedListByArgs(departmentsSql, organizationIds.toArray());
 
                     for (Map<String, Object> departmentRow : departmentRows) {
                         String rootId = normalizeText(departmentRow.get("root_id"));
@@ -863,7 +870,7 @@ public class OrganizationService {
             order by out.sort_order nulls last, out.name, out.id
             """.formatted(String.join(" and ", where));
         try {
-            List<Map<String, Object>> items = organizationRepository.queryForList(sql, params.toArray());
+            List<Map<String, Object>> items = organizationRepository.queryForNamedListByArgs(sql, params.toArray());
             return ResponseEntity.ok(mapOf(
                 "ok", true,
                 "items", items,
@@ -894,7 +901,7 @@ public class OrganizationService {
             order by c.name, c.id
             """.formatted(String.join(" and ", where));
         try {
-            List<Map<String, Object>> items = organizationRepository.queryForList(sql, params.toArray());
+            List<Map<String, Object>> items = organizationRepository.queryForNamedListByArgs(sql, params.toArray());
             return ResponseEntity.ok(mapOf(
                 "ok", true,
                 "items", items,
@@ -1062,15 +1069,15 @@ public class OrganizationService {
         List<String> organUnitTypeIds = new ArrayList<>(uniqueTypeIds);
 
         try {
-            Integer organizationExists = organizationRepository.queryForObject(
+            Integer organizationExists = organizationRepository.queryForNamedObject(
                 """
                 select count(*)::int
                 from party.organ_unit ou
-                where ou.id = ?::uuid
+                where ou.id = cast(:organUnitId as uuid)
                   and ou.deleted = false
                 """,
                 Integer.class,
-                organUnitId
+                new OrganUnitIdParams(organUnitId)
             );
             if (organizationExists == null || organizationExists == 0) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf(
@@ -1079,7 +1086,7 @@ public class OrganizationService {
                 ));
             }
 
-            Map<String, Object> currentOrg = organizationRepository.queryForMap(
+            Map<String, Object> currentOrg = organizationRepository.queryForNamedMap(
                 """
                 select
                   ou.sap_id,
@@ -1094,11 +1101,11 @@ public class OrganizationService {
                   ou.sign_resident,
                   coalesce(ou.additional::text, '{}') as additional_json
                 from party.organ_unit ou
-                where ou.id = ?::uuid
+                where ou.id = cast(:organUnitId as uuid)
                   and ou.deleted = false
                 limit 1
                 """,
-                organUnitId
+                new OrganUnitIdParams(organUnitId)
             );
 
             if (!hasSapId) {
@@ -1133,15 +1140,15 @@ public class OrganizationService {
             }
 
             if (countryId != null) {
-                Integer countryExists = organizationRepository.queryForObject(
+                Integer countryExists = organizationRepository.queryForNamedObject(
                     """
                     select count(*)::int
                     from nsi.country c
-                    where c.id = ?::uuid
+                    where c.id = cast(:countryId as uuid)
                       and c.deleted = false
                     """,
                     Integer.class,
-                    countryId
+                    new CountryIdParams(countryId)
                 );
                 if (countryExists == null || countryExists == 0) {
                     return badRequest("Параметр countryId содержит несуществующую страну");
@@ -1151,7 +1158,7 @@ public class OrganizationService {
             if (hasOrganUnitTypeIds && !organUnitTypeIds.isEmpty()) {
                 String typePlaceholders = String.join(", ", Collections.nCopies(organUnitTypeIds.size(), "?::uuid"));
                 List<Object> typeParams = new ArrayList<>(organUnitTypeIds);
-                Integer existingTypes = organizationRepository.queryForObject(
+                Integer existingTypes = organizationRepository.queryForNamedObjectByArgs(
                     """
                     select count(*)::int
                     from party.organ_unit_type out
@@ -1215,37 +1222,39 @@ public class OrganizationService {
 
             String additionalJson = objectMapper.writeValueAsString(additional);
 
-            int updatedCount = organizationRepository.update(
+            int updatedCount = organizationRepository.updateNamed(
                 """
                 update party.organ_unit
                 set
-                  sap_id = ?,
-                  name = ?,
-                  sh_name = ?,
-                  inn = ?,
-                  kpp = ?,
-                  ogrn = ?,
-                  okpo = ?,
-                  short_code = ?,
-                  country_id = ?::uuid,
-                  sign_resident = ?,
-                  additional = ?::jsonb,
+                  sap_id = :sapId,
+                  name = :name,
+                  sh_name = :shName,
+                  inn = :inn,
+                  kpp = :kpp,
+                  ogrn = :ogrn,
+                  okpo = :okpo,
+                  short_code = :shortCode,
+                  country_id = cast(:countryId as uuid),
+                  sign_resident = :signResident,
+                  additional = cast(:additionalJson as jsonb),
                   updated_at = now()
-                where id = ?::uuid
+                where id = cast(:organUnitId as uuid)
                   and deleted = false
                 """,
-                sapId,
-                name,
-                shName,
-                inn,
-                kpp,
-                ogrn,
-                okpo,
-                shortCode,
-                countryId,
-                signResident,
-                additionalJson,
-                organUnitId
+                new UpdateOrganizationParams(
+                    organUnitId,
+                    sapId,
+                    name,
+                    shName,
+                    inn,
+                    kpp,
+                    ogrn,
+                    okpo,
+                    shortCode,
+                    countryId,
+                    signResident,
+                    additionalJson
+                )
             );
             if (updatedCount == 0) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf(
@@ -1255,12 +1264,12 @@ public class OrganizationService {
             }
 
             if (hasOrganUnitTypeIds) {
-                organizationRepository.update(
+                organizationRepository.updateNamed(
                     """
                     delete from party.organ_unit_organ_unit_types
-                    where organ_unit_id = ?::uuid
+                    where organ_unit_id = cast(:organUnitId as uuid)
                     """,
-                    organUnitId
+                    new OrganUnitIdParams(organUnitId)
                 );
                 if (!organUnitTypeIds.isEmpty()) {
                     String insertPlaceholders = organUnitTypeIds.stream()
@@ -1271,7 +1280,7 @@ public class OrganizationService {
                         insertParams.add(organUnitId);
                         insertParams.add(typeId);
                     }
-                    organizationRepository.update(
+                    organizationRepository.updateNamedByArgs(
                         """
                         insert into party.organ_unit_organ_unit_types (
                           organ_unit_id,
@@ -1284,33 +1293,32 @@ public class OrganizationService {
                 }
             }
 
-            List<Map<String, Object>> addressRows = organizationRepository.queryForList(
+            List<Map<String, Object>> addressRows = organizationRepository.queryForNamedList(
                 """
                 select a.id::text as id
                 from party.address a
-                where a.organ_unit_id = ?::uuid
+                where a.organ_unit_id = cast(:organUnitId as uuid)
                   and a.deleted = false
                 order by a.updated_at desc nulls last, a.created_at desc nulls last, a.id
                 limit 1
                 """,
-                organUnitId
+                new OrganUnitIdParams(organUnitId)
             );
             String addressId = addressRows.isEmpty() ? null : normalizeText(addressRows.get(0).get("id"));
             if (hasAddress) {
                 if (addressId != null) {
-                    organizationRepository.update(
+                    organizationRepository.updateNamed(
                         """
                         update party.address
                         set
-                          full_address = ?,
+                          full_address = :fullAddress,
                           updated_at = now()
-                        where id = ?::uuid
+                        where id = cast(:addressId as uuid)
                         """,
-                        address,
-                        addressId
+                        new AddressUpdateParams(addressId, address)
                     );
                 } else if (address != null) {
-                    organizationRepository.update(
+                    organizationRepository.updateNamed(
                         """
                         insert into party.address (
                           id,
@@ -1320,11 +1328,16 @@ public class OrganizationService {
                           created_at,
                           updated_at
                         )
-                        values (?::uuid, ?, ?::uuid, false, now(), now())
+                        values (
+                          cast(:addressId as uuid),
+                          :fullAddress,
+                          cast(:organUnitId as uuid),
+                          false,
+                          now(),
+                          now()
+                        )
                         """,
-                        UUID.randomUUID().toString(),
-                        address,
-                        organUnitId
+                        new AddressInsertParams(UUID.randomUUID().toString(), organUnitId, address)
                     );
                 }
             }
@@ -1418,7 +1431,7 @@ public class OrganizationService {
             + tableSql
             + " t where t."
             + columnSql
-            + " = ?::uuid"
+            + " = cast(:organUnitId as uuid)"
             + deletedCondition;
     }
 
@@ -2017,6 +2030,41 @@ public class OrganizationService {
     }
 
     private record ColumnsParseResult(List<ExportColumn> columns, String error) {
+    }
+
+    private record OrganUnitIdParams(String organUnitId) {
+    }
+
+    private record CountryIdParams(String countryId) {
+    }
+
+    private record UpdateOrganizationParams(
+        String organUnitId,
+        String sapId,
+        String name,
+        String shName,
+        String inn,
+        String kpp,
+        String ogrn,
+        String okpo,
+        String shortCode,
+        String countryId,
+        boolean signResident,
+        String additionalJson
+    ) {
+    }
+
+    private record AddressUpdateParams(
+        String addressId,
+        String fullAddress
+    ) {
+    }
+
+    private record AddressInsertParams(
+        String addressId,
+        String organUnitId,
+        String fullAddress
+    ) {
     }
 
     private record OrganizationReferenceCheck(

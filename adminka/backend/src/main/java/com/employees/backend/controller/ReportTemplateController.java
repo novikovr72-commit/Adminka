@@ -167,6 +167,38 @@ public class ReportTemplateController {
         return reportTemplateService.addReportTemplateAccessGroup(reportTemplateId, rawBody);
     }
 
+    @DeleteMapping("/report-template/{reportTemplateId}/recipients")
+    public ResponseEntity<Map<String, Object>> deleteReportTemplateRecipient(
+        @PathVariable("reportTemplateId") String reportTemplateId,
+        @RequestParam("email") String email
+    ) {
+        return reportTemplateService.deleteReportTemplateRecipient(reportTemplateId, email);
+    }
+
+    @DeleteMapping("/report-templates/{reportTemplateId}/recipients")
+    public ResponseEntity<Map<String, Object>> deleteReportTemplateRecipientAlias(
+        @PathVariable("reportTemplateId") String reportTemplateId,
+        @RequestParam("email") String email
+    ) {
+        return reportTemplateService.deleteReportTemplateRecipient(reportTemplateId, email);
+    }
+
+    @PostMapping("/report-template/{reportTemplateId}/recipients")
+    public ResponseEntity<Map<String, Object>> addReportTemplateRecipient(
+        @PathVariable("reportTemplateId") String reportTemplateId,
+        @RequestBody(required = false) Map<String, Object> rawBody
+    ) {
+        return reportTemplateService.addReportTemplateRecipient(reportTemplateId, rawBody);
+    }
+
+    @PostMapping("/report-templates/{reportTemplateId}/recipients")
+    public ResponseEntity<Map<String, Object>> addReportTemplateRecipientAlias(
+        @PathVariable("reportTemplateId") String reportTemplateId,
+        @RequestBody(required = false) Map<String, Object> rawBody
+    ) {
+        return reportTemplateService.addReportTemplateRecipient(reportTemplateId, rawBody);
+    }
+
     @PostMapping("/report-template/sql/execute-check")
     public ResponseEntity<Map<String, Object>> executeCheckReportTemplateSql(
         @RequestBody(required = false) Map<String, Object> rawBody

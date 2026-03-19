@@ -107,7 +107,7 @@ public class RelationService {
             """.formatted(String.join(" and ", where));
 
         try {
-            List<Map<String, Object>> items = relationRepository.queryForList(sql, params.toArray());
+            List<Map<String, Object>> items = relationRepository.queryForNamedListByArgs(sql, params.toArray());
             return ResponseEntity.ok(mapOf(
                 "ok", true,
                 "items", items
@@ -142,7 +142,7 @@ public class RelationService {
             """.formatted(String.join(" and ", where));
 
         try {
-            List<Map<String, Object>> items = relationRepository.queryForList(sql, params.toArray());
+            List<Map<String, Object>> items = relationRepository.queryForNamedListByArgs(sql, params.toArray());
             return ResponseEntity.ok(mapOf(
                 "ok", true,
                 "items", items
@@ -259,7 +259,7 @@ public class RelationService {
             """.formatted(whereSql, orderBy);
 
         try {
-            List<Map<String, Object>> items = relationRepository.queryForList(sql, params.toArray());
+            List<Map<String, Object>> items = relationRepository.queryForNamedListByArgs(sql, params.toArray());
             return ResponseEntity.ok(mapOf(
                 "ok", true,
                 "items", items,
@@ -387,7 +387,7 @@ public class RelationService {
             """.formatted(whereSql, orderBy);
 
         try {
-            List<Map<String, Object>> items = relationRepository.queryForList(sql, params.toArray());
+            List<Map<String, Object>> items = relationRepository.queryForNamedListByArgs(sql, params.toArray());
             return ResponseEntity.ok(mapOf(
                 "ok", true,
                 "items", items,
@@ -446,29 +446,33 @@ public class RelationService {
         }
 
         try {
-            Integer duplicateCount = relationRepository.queryForObject(
+            Integer duplicateCount = relationRepository.queryForNamedObject(
                 """
                 select count(*)::int
                 from party.relation r
                 where r.deleted = false
-                  and r.employee_id = ?::uuid
-                  and r.organ_unit_id = ?::uuid
-                  and r.relation_type_id = ?::uuid
-                  and r.sales_organization_id is not distinct from ?::uuid
-                  and r.product_groups_id is not distinct from ?::uuid
+                  and r.employee_id = cast(:employeeId as uuid)
+                  and r.organ_unit_id = cast(:organUnitId as uuid)
+                  and r.relation_type_id = cast(:relationTypeId as uuid)
+                  and r.sales_organization_id is not distinct from cast(:salesOrganizationId as uuid)
+                  and r.product_groups_id is not distinct from cast(:productGroupsId as uuid)
                 """,
                 Integer.class,
-                employeeId,
-                organUnitId,
-                relationTypeId,
-                salesOrganizationId,
-                productGroupsId
+                new RelationUpsertParams(
+                    null,
+                    employeeId,
+                    organUnitId,
+                    relationTypeId,
+                    salesOrganizationId,
+                    productGroupsId,
+                    defaultFlag
+                )
             );
             if (duplicateCount != null && duplicateCount > 0) {
                 return badRequest("Связь с указанным сочетанием уже существует");
             }
 
-            String relationId = relationRepository.queryForObject(
+            String relationId = relationRepository.queryForNamedObject(
                 """
                 insert into party.relation (
                   employee_id,
@@ -478,16 +482,26 @@ public class RelationService {
                   default_flag,
                   product_groups_id
                 )
-                values (?::uuid, ?::uuid, ?::uuid, ?::uuid, ?, ?::uuid)
+                values (
+                    cast(:employeeId as uuid),
+                    cast(:organUnitId as uuid),
+                    cast(:relationTypeId as uuid),
+                    cast(:salesOrganizationId as uuid),
+                    :defaultFlag,
+                    cast(:productGroupsId as uuid)
+                )
                 returning id::text
                 """,
                 String.class,
-                employeeId,
-                organUnitId,
-                relationTypeId,
-                salesOrganizationId,
-                defaultFlag,
-                productGroupsId
+                new RelationUpsertParams(
+                    null,
+                    employeeId,
+                    organUnitId,
+                    relationTypeId,
+                    salesOrganizationId,
+                    productGroupsId,
+                    defaultFlag
+                )
             );
 
             Map<String, Object> item = loadRelationItem(relationId);
@@ -558,49 +572,54 @@ public class RelationService {
         }
 
         try {
-            Integer duplicateCount = relationRepository.queryForObject(
+            Integer duplicateCount = relationRepository.queryForNamedObject(
                 """
                 select count(*)::int
                 from party.relation r
                 where r.deleted = false
-                  and r.employee_id = ?::uuid
-                  and r.organ_unit_id = ?::uuid
-                  and r.relation_type_id = ?::uuid
-                  and r.sales_organization_id is not distinct from ?::uuid
-                  and r.product_groups_id is not distinct from ?::uuid
-                  and r.id <> ?::uuid
+                  and r.employee_id = cast(:employeeId as uuid)
+                  and r.organ_unit_id = cast(:organUnitId as uuid)
+                  and r.relation_type_id = cast(:relationTypeId as uuid)
+                  and r.sales_organization_id is not distinct from cast(:salesOrganizationId as uuid)
+                  and r.product_groups_id is not distinct from cast(:productGroupsId as uuid)
+                  and r.id <> cast(:relationId as uuid)
                 """,
                 Integer.class,
-                employeeId,
-                organUnitId,
-                relationTypeId,
-                salesOrganizationId,
-                productGroupsId,
-                normalizedRelationId
+                new RelationUpsertParams(
+                    normalizedRelationId,
+                    employeeId,
+                    organUnitId,
+                    relationTypeId,
+                    salesOrganizationId,
+                    productGroupsId,
+                    defaultFlag
+                )
             );
             if (duplicateCount != null && duplicateCount > 0) {
                 return badRequest("Связь с указанным сочетанием уже существует");
             }
 
-            int updatedCount = relationRepository.update(
+            int updatedCount = relationRepository.updateNamed(
                 """
                 update party.relation
                 set
-                  employee_id = ?::uuid,
-                  organ_unit_id = ?::uuid,
-                  relation_type_id = ?::uuid,
-                  sales_organization_id = ?::uuid,
-                  default_flag = ?,
-                  product_groups_id = ?::uuid
-                where id = ?::uuid
+                  employee_id = cast(:employeeId as uuid),
+                  organ_unit_id = cast(:organUnitId as uuid),
+                  relation_type_id = cast(:relationTypeId as uuid),
+                  sales_organization_id = cast(:salesOrganizationId as uuid),
+                  default_flag = :defaultFlag,
+                  product_groups_id = cast(:productGroupsId as uuid)
+                where id = cast(:relationId as uuid)
                 """,
-                employeeId,
-                organUnitId,
-                relationTypeId,
-                salesOrganizationId,
-                defaultFlag,
-                productGroupsId,
-                normalizedRelationId
+                new RelationUpsertParams(
+                    normalizedRelationId,
+                    employeeId,
+                    organUnitId,
+                    relationTypeId,
+                    salesOrganizationId,
+                    productGroupsId,
+                    defaultFlag
+                )
             );
             if (updatedCount == 0) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf(
@@ -629,9 +648,9 @@ public class RelationService {
         }
 
         try {
-            int deletedCount = relationRepository.update(
-                "delete from party.relation where id = ?::uuid",
-                normalizedRelationId
+            int deletedCount = relationRepository.updateNamed(
+                "delete from party.relation where id = cast(:relationId as uuid)",
+                new RelationIdParams(normalizedRelationId)
             );
             if (deletedCount == 0) {
                 return ResponseEntity.status(HttpStatus.NOT_FOUND).body(mapOf(
@@ -749,7 +768,7 @@ public class RelationService {
 
         try {
             LinkedHashMap<String, String> reportFilters = collectRelationReportFilters(body, sorts);
-            List<Map<String, Object>> rows = relationRepository.queryForList(sql, params.toArray());
+            List<Map<String, Object>> rows = relationRepository.queryForNamedListByArgs(sql, params.toArray());
             byte[] excel = buildExcelFromRowsWithFilters(
                 "Relations",
                 columnsResult.columns(),
@@ -764,7 +783,7 @@ public class RelationService {
     }
 
     private Map<String, Object> loadRelationItem(String relationId) {
-        return relationRepository.queryForMap(
+        return relationRepository.queryForNamedMap(
             """
             select
               r.id::text as "relationId",
@@ -794,10 +813,10 @@ public class RelationService {
             left join party.relation_type rt on rt.id = r.relation_type_id and rt.deleted = false
             left join party.organ_unit sou on sou.id = r.sales_organization_id and sou.deleted = false
             left join nsi.product_groups pg on pg.id = r.product_groups_id and pg.deleted = false
-            where r.id = ?::uuid
+            where r.id = cast(:relationId as uuid)
             limit 1
             """,
-            relationId
+            new RelationIdParams(relationId)
         );
     }
 
@@ -1199,5 +1218,19 @@ public class RelationService {
     }
 
     private record ColumnsParseResult(List<ExportColumn> columns, String error) {
+    }
+
+    private record RelationIdParams(String relationId) {
+    }
+
+    private record RelationUpsertParams(
+        String relationId,
+        String employeeId,
+        String organUnitId,
+        String relationTypeId,
+        String salesOrganizationId,
+        String productGroupsId,
+        boolean defaultFlag
+    ) {
     }
 }

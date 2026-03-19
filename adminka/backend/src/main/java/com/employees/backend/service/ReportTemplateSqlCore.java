@@ -204,14 +204,13 @@ class ReportTemplateSqlCore {
                 roleNames
             );
             String countSql = "select count(*)::bigint as total_count from (" + sqlForExecution + ") report_sql_results";
-            String pagedSql = "select * from (" + sqlForExecution + ") report_sql_results limit ? offset ?";
+            String pagedSql = "select * from (" + sqlForExecution + ") report_sql_results limit :limit offset :sqlOffset";
 
             long startedAtNanos = System.nanoTime();
             Long totalRows = reportTemplateRepository.queryLong(countSql);
-            ReportTemplateRepository.QueryRowsWithColumns queryResult = reportTemplateRepository.queryRowsWithColumns(
+            ReportTemplateRepository.QueryRowsWithColumns queryResult = reportTemplateRepository.queryRowsWithColumnsNamed(
                 pagedSql,
-                limit,
-                sqlOffset
+                new ResultsPageParams(limit, sqlOffset)
             );
             long elapsedMs = (System.nanoTime() - startedAtNanos) / 1_000_000L;
             long total = totalRows == null ? 0L : totalRows;
@@ -763,5 +762,11 @@ class ReportTemplateSqlCore {
     }
 
     private record ParseResult(Integer value, String error) {
+    }
+
+    private record ResultsPageParams(
+        int limit,
+        int sqlOffset
+    ) {
     }
 }

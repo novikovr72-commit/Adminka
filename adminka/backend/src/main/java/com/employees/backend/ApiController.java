@@ -86,6 +86,7 @@ class ReportTemplateExcelCore {
     private static final Pattern NAMED_SQL_PARAM_PATTERN = Pattern.compile("(?<!:):[a-zA-Z_][a-zA-Z0-9_]*");
     private static final Pattern SQL_ERROR_POSITION_PATTERN = Pattern.compile("Position:\\s*(\\d+)", Pattern.CASE_INSENSITIVE);
     private static final Pattern FILE_NAME_NOW_TOKEN_PATTERN = Pattern.compile("\\{now(?::([^{}]+))?\\}", Pattern.CASE_INSENSITIVE);
+    private static final int REPORT_TEMPLATE_EXPORT_FETCH_SIZE = 2000;
     private static final Pattern SQL_ERROR_TEXT_PATTERN = Pattern.compile(
         "ERROR:\\s*([^\\n\\r]+?)(?=(?:\\s+Where:|\\s+Position:|$))",
         Pattern.CASE_INSENSITIVE
@@ -301,6 +302,7 @@ class ReportTemplateExcelCore {
     private final String frontendBaseUrl;
     private final String dadataFindPartyUrl;
     private final String dadataApiToken;
+    private final Integer reportTemplateExcelMaxRows;
 
     ReportTemplateExcelCore(
         JdbcTemplate jdbcTemplate,
@@ -309,7 +311,8 @@ class ReportTemplateExcelCore {
         String logsDir,
         String frontendBaseUrl,
         String dadataFindPartyUrl,
-        String dadataApiToken
+        String dadataApiToken,
+        Integer reportTemplateExcelMaxRows
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.reportTemplateRepository = reportTemplateRepository;
@@ -321,6 +324,10 @@ class ReportTemplateExcelCore {
         );
         this.dadataFindPartyUrl = StringUtils.trimWhitespace(dadataFindPartyUrl == null ? "" : dadataFindPartyUrl);
         this.dadataApiToken = StringUtils.trimWhitespace(dadataApiToken == null ? "" : dadataApiToken);
+        this.reportTemplateExcelMaxRows =
+            reportTemplateExcelMaxRows != null && reportTemplateExcelMaxRows > 0
+                ? reportTemplateExcelMaxRows
+                : null;
     }
 
     public Map<String, Object> health() {
@@ -2453,7 +2460,10 @@ class ReportTemplateExcelCore {
             List<Object> pagedParams = new ArrayList<>(params);
             pagedParams.add(limit);
             pagedParams.add(sqlOffset);
-            List<Map<String, Object>> rawItems = reportTemplateRepository.queryForList(dataSql, pagedParams.toArray());
+            List<Map<String, Object>> rawItems = reportTemplateRepository.queryForNamedListByArgs(
+                dataSql,
+                pagedParams.toArray()
+            );
             List<Map<String, Object>> items = new ArrayList<>(rawItems.size());
             for (Map<String, Object> item : rawItems) {
                 LinkedHashMap<String, Object> mapped = new LinkedHashMap<>(item);
@@ -2477,7 +2487,11 @@ class ReportTemplateExcelCore {
                 mapped.put("organ_unit_type_names", organUnitTypeNameItems);
                 items.add(mapped);
             }
-            Integer totalCount = reportTemplateRepository.queryForObject(countSql, Integer.class, params.toArray());
+            Integer totalCount = reportTemplateRepository.queryForNamedObjectByArgs(
+                countSql,
+                Integer.class,
+                params.toArray()
+            );
             return ResponseEntity.ok(mapOf(
                 "ok", true,
                 "items", items,
@@ -2715,7 +2729,8 @@ class ReportTemplateExcelCore {
                 logoBytes,
                 reportName == null ? "Отчет" : reportName,
                 startReportValue,
-                endReportValue
+                endReportValue,
+                null
             );
             String fileName = createReportTemplateExportFileName(outputFileName, "xlsx", reportName);
             long selectedRows = totalRows == null ? 0L : totalRows;
@@ -2824,7 +2839,8 @@ class ReportTemplateExcelCore {
                 logoBytes,
                 reportName == null ? "Отчет" : reportName,
                 startReportValue,
-                endReportValue
+                endReportValue,
+                reportTemplateExcelMaxRows
             );
             String fileName = createReportTemplateExportFileName(outputFileName, outputFileType, reportName);
             Map<String, String> extraHeaders = mapOf(
@@ -4161,7 +4177,8 @@ class ReportTemplateExcelCore {
         byte[] reportLogoBytes,
         String reportName,
         String startReportValue,
-        String endReportValue
+        String endReportValue,
+        Integer maxExportRows
     ) throws IOException {
         int startReportRow = normalizePositiveOrderNumber(reportInfo == null ? null : reportInfo.get("startReportRow")) == null
             ? 4
@@ -4397,7 +4414,15 @@ class ReportTemplateExcelCore {
             final long[] queryReadNanos = {0L};
             final long[] nextRowNanos = {0L};
             final long[] templateOnlyNanos = {0L};
-            jdbcTemplate.query(sql, (resultSet) -> {
+            jdbcTemplate.query(connection -> {
+                java.sql.PreparedStatement statement = connection.prepareStatement(
+                    sql,
+                    ResultSet.TYPE_FORWARD_ONLY,
+                    ResultSet.CONCUR_READ_ONLY
+                );
+                statement.setFetchSize(REPORT_TEMPLATE_EXPORT_FETCH_SIZE);
+                return statement;
+            }, (resultSet) -> {
                 Map<String, String> byLowerName = resolveResultSetColumnsByLowerName(resultSet);
                 while (true) {
                     long nextStartedAtNanos = System.nanoTime();
@@ -4407,6 +4432,11 @@ class ReportTemplateExcelCore {
                     nextRowNanos[0] += nextElapsedNanos;
                     if (!hasNext) {
                         break;
+                    }
+                    if (maxExportRows != null && maxExportRows > 0 && selectedRows[0] >= maxExportRows) {
+                        throw new IllegalStateException(
+                            "Превышен лимит строк для Excel-экспорта (" + maxExportRows + "). Уточните параметры отчета."
+                        );
                     }
                     selectedRows[0] += 1L;
                     long rowStartedAtNanos = System.nanoTime();

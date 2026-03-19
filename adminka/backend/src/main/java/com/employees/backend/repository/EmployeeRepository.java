@@ -3,43 +3,68 @@ package com.employees.backend.repository;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.BeanPropertyRowMapper;
+import org.springframework.jdbc.core.namedparam.BeanPropertySqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 @Repository
 public class EmployeeRepository {
-    private final JdbcTemplate jdbcTemplate;
+    private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
 
-    public EmployeeRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    public EmployeeRepository(NamedParameterJdbcTemplate namedParameterJdbcTemplate) {
+        this.namedParameterJdbcTemplate = namedParameterJdbcTemplate;
     }
 
-    public List<Map<String, Object>> queryForList(String sql, Object... args) {
-        return jdbcTemplate.queryForList(sql, args);
+    public List<Map<String, Object>> queryForNamedListByArgs(String sql, Object... args) {
+        PositionalSqlAdapter.SqlWithParams prepared = PositionalSqlAdapter.prepare(sql, args);
+        return namedParameterJdbcTemplate.queryForList(prepared.sql(), prepared.params());
     }
 
-    public int update(String sql, Object... args) {
-        return jdbcTemplate.update(sql, args);
+    public List<Map<String, Object>> queryForNamedList(String sql, Object beanParams) {
+        return namedParameterJdbcTemplate.queryForList(sql, params(beanParams));
     }
 
-    public <T> T queryForObject(String sql, Class<T> requiredType, Object... args) {
-        return jdbcTemplate.queryForObject(sql, requiredType, args);
+    public int updateNamedByArgs(String sql, Object... args) {
+        PositionalSqlAdapter.SqlWithParams prepared = PositionalSqlAdapter.prepare(sql, args);
+        return namedParameterJdbcTemplate.update(prepared.sql(), prepared.params());
     }
 
-    public Map<String, Object> queryForMap(String sql, Object... args) {
-        return jdbcTemplate.queryForMap(sql, args);
+    public int updateNamed(String sql, Object beanParams) {
+        return namedParameterJdbcTemplate.update(sql, params(beanParams));
+    }
+
+    public <T> T queryForNamedObjectByArgs(String sql, Class<T> requiredType, Object... args) {
+        PositionalSqlAdapter.SqlWithParams prepared = PositionalSqlAdapter.prepare(sql, args);
+        return namedParameterJdbcTemplate.queryForObject(prepared.sql(), prepared.params(), requiredType);
+    }
+
+    public <T> T queryForNamedObject(String sql, Class<T> requiredType, Object beanParams) {
+        return namedParameterJdbcTemplate.queryForObject(sql, params(beanParams), requiredType);
+    }
+
+    public Map<String, Object> queryForNamedMapByArgs(String sql, Object... args) {
+        PositionalSqlAdapter.SqlWithParams prepared = PositionalSqlAdapter.prepare(sql, args);
+        return namedParameterJdbcTemplate.queryForMap(prepared.sql(), prepared.params());
+    }
+
+    public Map<String, Object> queryForNamedMap(String sql, Object beanParams) {
+        return namedParameterJdbcTemplate.queryForMap(sql, params(beanParams));
     }
 
     public List<String> loadAllEmployeeEmailsLower() {
-        return jdbcTemplate.query(
+        List<EmailLowerProjection> rows = namedParameterJdbcTemplate.query(
             "select lower(email) as email from party.employee where email is not null",
-            (resultSet, rowNum) -> resultSet.getString("email")
+            params(new EmptyParams()),
+            BeanPropertyRowMapper.newInstance(EmailLowerProjection.class)
         );
+        return rows.stream().map(EmailLowerProjection::getEmail).toList();
     }
 
     public List<Map<String, Object>> loadActiveEmployeeIdEmail() {
-        return jdbcTemplate.queryForList(
-            "select id, email from party.employee where deleted = false"
+        return namedParameterJdbcTemplate.queryForList(
+            "select id, email from party.employee where deleted = false",
+            params(new EmptyParams())
         );
     }
 
@@ -53,7 +78,17 @@ public class EmployeeRepository {
         String middleName,
         String phoneNumber
     ) {
-        return jdbcTemplate.update(
+        InsertEmployeeParams sqlParams = new InsertEmployeeParams(
+            sapId,
+            fullName,
+            email,
+            personalNumber,
+            firstName,
+            surname,
+            middleName,
+            phoneNumber
+        );
+        return namedParameterJdbcTemplate.update(
             """
             insert into party.employee (
                 sap_id,
@@ -67,16 +102,21 @@ public class EmployeeRepository {
                 deleted,
                 created_at,
                 updated_at
-            ) values (?, ?, ?, ?, ?, ?, ?, ?, false, now(), now())
+            ) values (
+                :sapId,
+                :fullName,
+                :email,
+                :personalNumber,
+                :firstName,
+                :surname,
+                :middleName,
+                :phoneNumber,
+                false,
+                now(),
+                now()
+            )
             """,
-            sapId,
-            fullName,
-            email,
-            personalNumber,
-            firstName,
-            surname,
-            middleName,
-            phoneNumber
+            params(sqlParams)
         );
     }
 
@@ -90,20 +130,7 @@ public class EmployeeRepository {
         String phoneNumber,
         String email
     ) {
-        return jdbcTemplate.update(
-            """
-            update party.employee
-            set sap_id = ?,
-                full_name = ?,
-                personal_number = ?,
-                first_name = ?,
-                surname = ?,
-                middle_name = ?,
-                phone_number = ?,
-                deleted = false,
-                updated_at = now()
-            where email = ?
-            """,
+        UpdateEmployeeByEmailParams sqlParams = new UpdateEmployeeByEmailParams(
             sapId,
             fullName,
             personalNumber,
@@ -113,13 +140,80 @@ public class EmployeeRepository {
             phoneNumber,
             email
         );
+        return namedParameterJdbcTemplate.update(
+            """
+            update party.employee
+            set sap_id = :sapId,
+                full_name = :fullName,
+                personal_number = :personalNumber,
+                first_name = :firstName,
+                surname = :surname,
+                middle_name = :middleName,
+                phone_number = :phoneNumber,
+                deleted = false,
+                updated_at = now()
+            where email = :email
+            """,
+            params(sqlParams)
+        );
     }
 
     public int markEmployeeDeletedById(Object employeeId) {
         UUID id = employeeId instanceof UUID ? (UUID) employeeId : UUID.fromString(String.valueOf(employeeId));
-        return jdbcTemplate.update(
-            "update party.employee set deleted = true, updated_at = now() where id = ?",
-            id
+        return namedParameterJdbcTemplate.update(
+            "update party.employee set deleted = true, updated_at = now() where id = :employeeId",
+            params(new EmployeeIdParams(id))
         );
+    }
+
+    public <T> List<T> queryForBeans(String sql, Class<T> beanType, Object... args) {
+        PositionalSqlAdapter.SqlWithParams prepared = PositionalSqlAdapter.prepare(sql, args);
+        return namedParameterJdbcTemplate.query(prepared.sql(), prepared.params(), BeanPropertyRowMapper.newInstance(beanType));
+    }
+
+    public static class EmailLowerProjection {
+        private String email;
+
+        public String getEmail() {
+            return email;
+        }
+
+        public void setEmail(String email) {
+            this.email = email;
+        }
+    }
+
+    private static BeanPropertySqlParameterSource params(Object value) {
+        return new BeanPropertySqlParameterSource(value);
+    }
+
+    private record EmptyParams() {
+    }
+
+    private record EmployeeIdParams(UUID employeeId) {
+    }
+
+    private record InsertEmployeeParams(
+        String sapId,
+        String fullName,
+        String email,
+        Integer personalNumber,
+        String firstName,
+        String surname,
+        String middleName,
+        String phoneNumber
+    ) {
+    }
+
+    private record UpdateEmployeeByEmailParams(
+        String sapId,
+        String fullName,
+        Integer personalNumber,
+        String firstName,
+        String surname,
+        String middleName,
+        String phoneNumber,
+        String email
+    ) {
     }
 }

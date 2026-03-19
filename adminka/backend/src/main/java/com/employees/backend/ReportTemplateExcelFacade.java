@@ -19,7 +19,8 @@ public class ReportTemplateExcelFacade {
         @Value("${app.logs-dir:backend/logs}") String logsDir,
         @Value("${app.frontend-base-url:http://localhost:5175}") String frontendBaseUrl,
         @Value("${app.dadata.find-party-url:https://suggestions.dadata.ru/suggestions/api/4_1/rs/findById/party}") String dadataFindPartyUrl,
-        @Value("${app.dadata.api-token:}") String dadataApiToken
+        @Value("${app.dadata.api-token:}") String dadataApiToken,
+        AppReportTemplateProperties reportTemplateProperties
     ) {
         this.reportTemplateExcelCore = new ReportTemplateExcelCore(
             jdbcTemplate,
@@ -28,7 +29,8 @@ public class ReportTemplateExcelFacade {
             logsDir,
             frontendBaseUrl,
             dadataFindPartyUrl,
-            dadataApiToken
+            dadataApiToken,
+            reportTemplateProperties == null ? null : reportTemplateProperties.getExcelMaxRows()
         );
     }
 

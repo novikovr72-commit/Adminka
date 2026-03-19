@@ -17,23 +17,24 @@ import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.namedparam.BeanPropertySqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Service;
 
 @Service
 public class SystemLookupService {
-    private final JdbcTemplate jdbcTemplate;
+    private final NamedParameterJdbcTemplate namedParameterJdbcTemplate;
     private final ObjectMapper objectMapper;
     private final String dadataApiToken;
     private final String dadataFindPartyUrl;
 
     public SystemLookupService(
-        JdbcTemplate jdbcTemplate,
+        NamedParameterJdbcTemplate namedParameterJdbcTemplate,
         ObjectMapper objectMapper,
         @Value("${app.dadata.api-token:}") String dadataApiToken,
         @Value("${app.dadata.find-party-url:https://suggestions.dadata.ru/suggestions/api/4_1/rs/findById/party}") String dadataFindPartyUrl
     ) {
-        this.jdbcTemplate = jdbcTemplate;
+        this.namedParameterJdbcTemplate = namedParameterJdbcTemplate;
         this.objectMapper = objectMapper;
         this.dadataApiToken = dadataApiToken;
         this.dadataFindPartyUrl = dadataFindPartyUrl;
@@ -45,7 +46,11 @@ public class SystemLookupService {
 
     public ResponseEntity<Map<String, Object>> dbHealth() {
         try {
-            String dbName = jdbcTemplate.queryForObject("select current_database()", String.class);
+            String dbName = namedParameterJdbcTemplate.queryForObject(
+                "select current_database()",
+                new BeanPropertySqlParameterSource(new EmptyParams()),
+                String.class
+            );
             return ResponseEntity.ok(mapOf("ok", true, "database", dbName));
         } catch (Exception exception) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -331,5 +336,8 @@ public class SystemLookupService {
     }
 
     private record ParseResult(Integer value, String error) {
+    }
+
+    private record EmptyParams() {
     }
 }
