@@ -30,7 +30,8 @@ public class ReportTemplateExcelFacade {
             frontendBaseUrl,
             dadataFindPartyUrl,
             dadataApiToken,
-            reportTemplateProperties == null ? null : reportTemplateProperties.getExcelMaxRows()
+            reportTemplateProperties == null ? null : reportTemplateProperties.getExcelMaxRows(),
+            reportTemplateProperties == null ? null : reportTemplateProperties.getExcelTimezone()
         );
     }
 

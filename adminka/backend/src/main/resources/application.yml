@@ -21,6 +21,8 @@ app:
   logs-dir: ${IMPORT_LOGS_DIR:backend/logs}
   report-template:
     excel-max-rows: ${REPORT_TEMPLATE_EXCEL_MAX_ROWS:500000}
+    # Пусто = Europe/Moscow. Иначе IANA ID (UTC, America/New_York, …)
+    excel-timezone: ${REPORT_TEMPLATE_EXCEL_TIMEZONE:${APP_REPORT_EXCEL_TIMEZONE:}}
   dadata:
     find-party-url: ${DADATA_FIND_PARTY_URL:https://suggestions.dadata.ru/suggestions/api/4_1/rs/findById/party}
     api-token: ${DADATA_API_TOKEN:}

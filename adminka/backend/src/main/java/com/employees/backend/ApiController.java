@@ -57,6 +57,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -301,6 +303,7 @@ class ReportTemplateExcelCore {
     private final String dadataFindPartyUrl;
     private final String dadataApiToken;
     private final Integer reportTemplateExcelMaxRows;
+    private final ZoneId reportExcelZoneId;
 
     ReportTemplateExcelCore(
         JdbcTemplate jdbcTemplate,
@@ -310,7 +313,8 @@ class ReportTemplateExcelCore {
         String frontendBaseUrl,
         String dadataFindPartyUrl,
         String dadataApiToken,
-        Integer reportTemplateExcelMaxRows
+        Integer reportTemplateExcelMaxRows,
+        String reportExcelTimezone
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.reportTemplateRepository = reportTemplateRepository;
@@ -326,6 +330,21 @@ class ReportTemplateExcelCore {
             reportTemplateExcelMaxRows != null && reportTemplateExcelMaxRows > 0
                 ? reportTemplateExcelMaxRows
                 : null;
+        this.reportExcelZoneId = resolveReportExcelZoneId(reportExcelTimezone);
+    }
+
+    private static final ZoneId DEFAULT_REPORT_EXCEL_ZONE_ID = ZoneId.of("Europe/Moscow");
+
+    private static ZoneId resolveReportExcelZoneId(String configured) {
+        String trimmed = configured == null ? "" : configured.trim();
+        if (trimmed.isEmpty()) {
+            return DEFAULT_REPORT_EXCEL_ZONE_ID;
+        }
+        try {
+            return ZoneId.of(trimmed);
+        } catch (Exception ignored) {
+            return DEFAULT_REPORT_EXCEL_ZONE_ID;
+        }
     }
 
     public Map<String, Object> health() {
@@ -4335,7 +4354,7 @@ class ReportTemplateExcelCore {
             String periodLine = buildReportPeriodLine(startReportValue, endReportValue);
             String createdAtLine =
                 "Дата/время формирования отчета: " +
-                LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss"));
+                ZonedDateTime.now(reportExcelZoneId).format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss"));
 
             if (headerCaption != null && !headerCaption.isBlank()) {
                 Row titleRow = sheet.getRow(titleBaseRowIndex);
@@ -5916,7 +5935,7 @@ class ReportTemplateExcelCore {
     }
 
     private String createExportFileName(String prefix) {
-        return prefix + "-" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + ".xlsx";
+        return prefix + "-" + ZonedDateTime.now(reportExcelZoneId).format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss")) + ".xlsx";
     }
 
     private List<Map<String, Object>> parseJsonArrayOfObjects(Object rawJson) {
@@ -5965,7 +5984,7 @@ class ReportTemplateExcelCore {
         template = template.replace("{reportName}", normalizedReportName);
         template = template.replace("{REPORT_NAME}", normalizedReportName);
 
-        LocalDateTime now = LocalDateTime.now();
+        ZonedDateTime now = ZonedDateTime.now(reportExcelZoneId);
         Matcher matcher = FILE_NAME_NOW_TOKEN_PATTERN.matcher(template);
         StringBuffer replaced = new StringBuffer();
         while (matcher.find()) {
