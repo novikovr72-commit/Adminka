@@ -13,7 +13,6 @@ import org.apache.poi.ss.usermodel.Drawing;
 import org.apache.poi.ss.usermodel.BorderStyle;
 import org.apache.poi.ss.usermodel.Font;
 import org.apache.poi.ss.usermodel.FillPatternType;
-import org.apache.poi.ss.usermodel.Hyperlink;
 import org.apache.poi.ss.usermodel.HorizontalAlignment;
 import org.apache.poi.ss.usermodel.IndexedColors;
 import org.apache.poi.ss.usermodel.Picture;
@@ -22,7 +21,6 @@ import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.VerticalAlignment;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.util.CellRangeAddress;
-import org.apache.poi.common.usermodel.HyperlinkType;
 import org.apache.poi.xssf.streaming.SXSSFWorkbook;
 import org.apache.poi.xssf.usermodel.DefaultIndexedColorMap;
 import org.apache.poi.xssf.usermodel.XSSFCellStyle;
@@ -3622,12 +3620,12 @@ class ReportTemplateExcelCore {
                 String referenceSql = buildOrganizationReferenceCheckSql(reference);
                 Integer referencesCount = jdbcTemplate.queryForObject(
                     referenceSql,
-                    Integer.class,
+                Integer.class,
                     organUnitId
-                );
+            );
                 if (referencesCount != null && referencesCount > 0) {
-                    return ResponseEntity.status(HttpStatus.CONFLICT).body(mapOf(
-                        "ok", false,
+                return ResponseEntity.status(HttpStatus.CONFLICT).body(mapOf(
+                    "ok", false,
                         "error", "Организация используется в таблице " + reference.fullTableName()
                     ));
                 }
@@ -4491,9 +4489,9 @@ class ReportTemplateExcelCore {
                             rowQueryNanos += readLinkNanos;
                             String url = normalizeText(linkValue);
                             if (url != null && !url.isBlank()) {
-                                Hyperlink hyperlink = creationHelper.createHyperlink(HyperlinkType.URL);
-                                hyperlink.setAddress(url);
-                                cell.setHyperlink(hyperlink);
+                                String escapedUrl = url.replace("\"", "\"\"");
+                                String escapedText = textValue.replace("\"", "\"\"");
+                                cell.setCellFormula("HYPERLINK(\"" + escapedUrl + "\",\"" + escapedText + "\")");
                                 CellStyle alignedHyperlinkStyle = resolveHyperlinkCellStyle(
                                     workbook,
                                     cell.getCellStyle(),

@@ -7,7 +7,7 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "app.report-template")
 public class AppReportTemplateProperties {
 
-    private Integer excelMaxRows = 50000;
+    private Integer excelMaxRows = 500000;
 
     public Integer getExcelMaxRows() {
         return excelMaxRows;
