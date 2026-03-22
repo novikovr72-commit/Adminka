@@ -4283,6 +4283,8 @@ class ReportTemplateExcelCore {
             tableHeaderStyle.setBorderBottom(BorderStyle.THIN);
             tableHeaderStyle.setBorderLeft(BorderStyle.THIN);
             tableHeaderStyle.setBorderRight(BorderStyle.THIN);
+            /* Иначе Excel не показывает \\n в подписи и не переносит длинный текст по ширине столбца */
+            tableHeaderStyle.setWrapText(true);
 
             CellStyle dataDefaultStyle = workbook.createCellStyle();
             Font dataFont = workbook.createFont();
@@ -4404,7 +4406,16 @@ class ReportTemplateExcelCore {
             if (headerRow == null) {
                 headerRow = sheet.createRow(startRowIndex);
             }
-            headerRow.setHeightInPoints(Math.max(12f, Math.min(200f, heightTabCaption)));
+            int maxHeaderLineCount = 1;
+            for (ReportFieldConfig headerField : visibleFields) {
+                String cap = headerField.caption();
+                if (cap != null && !cap.isBlank()) {
+                    maxHeaderLineCount = Math.max(maxHeaderLineCount, cap.split("\\R", -1).length);
+                }
+            }
+            headerRow.setHeightInPoints(
+                Math.max(12f, Math.min(409f, heightTabCaption * maxHeaderLineCount))
+            );
 
             int[] maxLengths = new int[visibleFields.size()];
             for (int index = 0; index < visibleFields.size(); index += 1) {
