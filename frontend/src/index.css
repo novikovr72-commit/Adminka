@@ -1,0 +1,6070 @@
+body {
+  margin: 0;
+  font-family: "PT Root UI", Arial, sans-serif;
+  background: #edeeef;
+  color: #001729;
+}
+
+/* Единый стиль скролла по всему приложению */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(127, 127, 127, 0.45) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(127, 127, 127, 0.45);
+  border-radius: 0 8px 8px 0;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.content-area.dark * {
+  scrollbar-color: rgba(196, 208, 224, 0.45) transparent;
+}
+
+.content-area.dark *::-webkit-scrollbar-thumb {
+  background: rgba(196, 208, 224, 0.45);
+}
+
+.app-layout {
+  min-height: 100vh;
+  display: flex;
+}
+
+.sidebar {
+  width: 256px;
+  background: #353b47ff;
+  border-right: 1px solid #c1c6c84d;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  transition: width 0.2s ease, padding 0.2s ease;
+}
+
+.sidebar.collapsed {
+  width: 64px;
+  padding: 16px 8px;
+}
+
+.sidebar-top {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.administration-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: transparent;
+  z-index: 2147483600;
+}
+
+.administration-panel {
+  position: fixed;
+  width: min(420px, calc(100vw - 32px));
+  border: 1px solid #c1c6c84d;
+  border-radius: 10px;
+  background: #edeeef;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-height: min(640px, calc(100vh - 48px));
+  z-index: 2147483601;
+  opacity: 1;
+  transform: translateX(0) scale(1);
+  transform-origin: left center;
+  transition: none;
+}
+
+.administration-panel.closing {
+  opacity: 0;
+  transform: translateX(-14px) scale(0.985);
+  transition:
+    opacity 140ms ease,
+    transform 160ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.administration-panel.dark {
+  background: #475363;
+  border-color: #788696ff;
+}
+
+.administration-panel-title {
+  padding: 14px 16px;
+  font-size: 18px;
+  line-height: 24px;
+  font-weight: 700;
+  color: #001729;
+  white-space: nowrap;
+}
+
+.administration-panel-title-with-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.administration-panel-title-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.administration-panel-title-actions {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 2px;
+}
+
+.administration-panel-title-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.administration-panel-title-icon-btn:hover {
+  background: rgb(0 23 41 / 0.08);
+}
+
+.administration-panel-title-icon-btn:focus-visible {
+  outline: 2px solid #2b6cb0;
+  outline-offset: 1px;
+}
+
+.administration-panel.dark .administration-panel-title-icon-btn:hover {
+  background: rgb(255 255 255 / 0.1);
+}
+
+.administration-panel.dark .administration-panel-title {
+  color: #f2f3f4;
+}
+
+.administration-section-header {
+  width: 100%;
+  border: none;
+  background: #d4e6fb;
+  color: #001729;
+  padding: 10px 14px;
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 400;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  text-align: left;
+}
+
+.administration-panel.dark .administration-section-header {
+  background: #5e6d7e;
+  color: #f2f3f4;
+}
+
+.administration-section-header-static {
+  cursor: default;
+}
+
+.administration-section-chevron {
+  font-size: 14px;
+  line-height: 14px;
+}
+
+.administration-section-items {
+  display: flex;
+  flex-direction: column;
+  padding: 2px 0;
+}
+
+.administration-section-item {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: #001729;
+  text-align: left;
+  font-size: 14px;
+  line-height: 20px;
+  padding: 8px 14px 8px 30px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.administration-panel.dark .administration-section-item {
+  color: #f2f3f4;
+}
+
+.administration-section-item:hover {
+  background: #e4effd;
+}
+
+.administration-panel.dark .administration-section-item:hover {
+  background: #5e6d7e;
+}
+
+.administration-section-item.active {
+  background: #d4e6fb;
+  font-weight: 500;
+}
+
+.administration-panel.dark .administration-section-item.active {
+  background: #3663aaff;
+}
+
+.sidebar-button {
+  width: 100%;
+  border: none;
+  border-radius: 4px;
+  background: #43597dff;
+  color: #f2f3f4ff;
+  padding: 12px 16px;
+  font-size: 14px;
+  line-height: 18px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sidebar-button:hover {
+  background: #4b638aff;
+}
+
+.sidebar-button.sidebar-action.active {
+  background: #3663aaff;
+}
+
+.sidebar-button.sidebar-action.active:hover {
+  background: #3c73caff;
+}
+
+.sidebar-action-icon {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+}
+
+.sidebar-action-icon svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.sidebar-button.icon-only {
+  justify-content: center;
+  padding: 12px;
+}
+
+.sidebar-toggle {
+  margin-top: 16px;
+}
+
+.sidebar-bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.sidebar-theme-button {
+  margin-top: 0;
+}
+
+.sidebar-theme-button.active {
+  background: #3663aaff;
+}
+
+.sidebar-theme-button.active:hover {
+  background: #3c73caff;
+}
+
+.content-area {
+  flex: 1;
+  padding: 24px;
+  --main-bg: #edeeef;
+  --main-text: #001729;
+  --modal-bg: #ffffff;
+  --modal-text: #001729;
+  --muted-text: #5a6b78;
+  --modal-border: #c1c6c84d;
+  --link-color: #2a8cff;
+  background: var(--main-bg);
+  color: var(--main-text);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100vh;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.content-area.dark {
+  --main-bg: #3c4854;
+  --main-text: #f2f3f4;
+  --modal-bg: #475363;
+  --modal-text: #f2f3f4;
+  --muted-text: #f2f3f4;
+  --modal-border: #788696ff;
+  --link-color: #93ccffff;
+}
+
+.page-header {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 25;
+  background: var(--main-bg);
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.page-header.report-settings-page-header {
+  margin-bottom: 0;
+  z-index: 120;
+}
+
+.page-header h1 {
+  grid-column: 1;
+  grid-row: 1;
+  margin: 0;
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 700;
+  color: var(--main-text);
+  align-self: center;
+}
+
+.page-header-right {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+  display: block;
+}
+
+.header-time-block {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-end;
+  gap: 10px;
+  color: var(--main-text);
+}
+
+.header-time-value {
+  font-size: 24px;
+  line-height: 28px;
+  font-weight: 700;
+}
+
+.header-date-value {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 400;
+  opacity: 0.9;
+}
+
+.header-weekday-value {
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 500;
+  text-transform: capitalize;
+  opacity: 0.95;
+}
+
+.report-list-header-actions {
+  display: flex;
+  width: 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 6px;
+  overflow: visible;
+}
+
+.page-header-actions-row {
+  position: sticky;
+  top: 48px;
+  z-index: 119;
+  background: var(--main-bg);
+  padding-top: 2px;
+  padding-bottom: 4px;
+}
+
+.report-list-header-actions > .panel-action-button,
+.report-list-header-actions > .upload-action-button {
+  width: auto;
+  min-width: 0;
+}
+
+.main-panel.report-settings-main-panel,
+.main-panel.entity-list-main-panel {
+  margin-top: -2px;
+  padding: 0;
+  gap: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  overflow: visible;
+  --report-card-slide-duration: 0.32s;
+  --report-card-slide-easing: cubic-bezier(0.45, 0, 0.55, 1);
+}
+
+.main-panel.report-settings-main-panel .list-content-layout.report-settings-layout,
+.main-panel.entity-list-main-panel .list-content-layout.entity-split-layout {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  height: 100%;
+  min-height: 0;
+  margin-bottom: 12px;
+}
+
+.main-panel.report-settings-main-panel .list-content-layout.report-settings-layout .list-content-main,
+.main-panel.entity-list-main-panel .list-content-layout.entity-split-layout .list-content-main {
+  flex-grow: 0;
+  flex-shrink: 0;
+  flex-basis: 100%;
+  width: auto;
+  max-width: 100%;
+  min-width: 0;
+  position: relative;
+  background: var(--modal-bg);
+  border: 1px solid var(--modal-border);
+  border-right: 1px solid var(--modal-border);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: none;
+  outline: none;
+  will-change: flex-basis;
+  transition:
+    flex-basis var(--report-card-slide-duration) var(--report-card-slide-easing),
+    max-width var(--report-card-slide-duration) var(--report-card-slide-easing);
+}
+
+.main-panel.report-settings-main-panel .list-content-layout.report-settings-layout .list-content-main::after,
+.main-panel.entity-list-main-panel .list-content-layout.entity-split-layout .list-content-main::after {
+  content: none;
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--modal-border);
+  pointer-events: none;
+  z-index: 90;
+}
+
+.main-panel.report-settings-main-panel .list-content-layout.report-settings-layout.split-view .list-content-main,
+.main-panel.entity-list-main-panel .list-content-layout.entity-split-layout.split-view .list-content-main {
+  flex-basis: 25%;
+  max-width: 25%;
+  box-shadow: none;
+}
+
+.header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 18px;
+  color: var(--main-text);
+}
+
+.theme-toggle input {
+  margin: 0;
+}
+
+.main-panel {
+  background: var(--modal-bg);
+  border: 1px solid var(--modal-border);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.main-panel-placeholder {
+  flex: 1;
+  min-height: 0;
+}
+
+.print-forms-page {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.print-forms-error {
+  border: 1px solid #e11d48;
+  border-radius: 8px;
+  background: rgba(225, 29, 72, 0.1);
+  color: #9f1239;
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 16px;
+}
+
+.content-area.dark .print-forms-error {
+  border-color: #f43f5e;
+  color: #fecdd3;
+  background: rgba(244, 63, 94, 0.16);
+}
+
+.print-forms-list-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  flex: 1;
+}
+
+.print-forms-create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.print-forms-textarea {
+  min-height: 120px;
+  resize: vertical;
+  padding-right: 10px;
+}
+
+.print-forms-upload-label {
+  width: fit-content;
+}
+
+.print-forms-upload-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.print-forms-detected-fields {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.print-forms-detected-fields-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.print-forms-detected-field-item {
+  border: 1px solid var(--modal-border);
+  background: var(--main-bg);
+  color: var(--main-text);
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 12px;
+  line-height: 14px;
+}
+
+.main-panel-toolbar {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.main-panel-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Иконки 16×16 в кнопках с подписью (currentColor) */
+.btn-icon-16 {
+  flex-shrink: 0;
+  display: block;
+  color: inherit;
+}
+
+.panel-action-button {
+  border: 1px solid var(--modal-border);
+  border-radius: 4px;
+  background: var(--main-bg);
+  color: var(--main-text);
+  padding: 6px 10px;
+  font-size: 13px;
+  line-height: 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.panel-action-button:hover {
+  background: #d0e9ff;
+}
+
+.panel-action-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.organizations-select-perf-badge {
+  margin-left: 4px;
+  padding: 5px 8px;
+  border: 1px solid var(--modal-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--main-bg) 92%, transparent);
+  color: color-mix(in srgb, var(--main-text) 86%, transparent);
+  font-size: 12px;
+  line-height: 14px;
+  white-space: nowrap;
+}
+
+.upload-action-button:has(input:disabled) {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.content-area.dark .panel-action-button:hover {
+  background: #5e6d7eff;
+}
+
+.main-panel-header h2 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 28px;
+  color: var(--main-text);
+}
+
+.table-wrapper {
+  overflow-x: auto;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  margin-top: 8px;
+  position: relative;
+  z-index: 1;
+}
+
+.employee-grid td.list-virtual-spacer {
+  padding: 0;
+  border: none;
+  line-height: 0;
+  vertical-align: top;
+}
+
+.list-content-layout {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.list-content-main {
+  width: 100%;
+  max-width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  transition: width 0.24s ease, max-width 0.24s ease;
+}
+
+
+.list-content-layout.split-view .list-content-main {
+  width: 25%;
+  max-width: 25%;
+}
+
+.employee-card-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 75%;
+  min-width: 480px;
+  background: var(--modal-bg);
+  border-left: 1px solid var(--modal-border);
+  transform: translateX(100%);
+  transition: transform 0.24s ease;
+  z-index: 15;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -8px 0 20px rgba(0, 0, 0, 0.08);
+}
+
+.list-content-layout.report-settings-layout .employee-card-panel.report-card-panel,
+.list-content-layout.entity-split-layout .employee-card-panel.list-card-panel {
+  position: relative;
+  top: auto;
+  right: auto;
+  bottom: auto;
+  flex: 0 0 0%;
+  max-width: 0;
+  width: auto;
+  min-width: 0;
+  height: 100%;
+  margin-left: 0;
+  align-self: stretch;
+  z-index: 50;
+  border: none;
+  border-radius: 8px;
+  box-shadow: none;
+  transform: translateX(calc(100% + 8px));
+  opacity: 1;
+  visibility: visible;
+  pointer-events: none;
+  overflow: hidden;
+  will-change: flex-basis, max-width, margin-left, transform;
+  transition:
+    flex-basis var(--report-card-slide-duration) var(--report-card-slide-easing),
+    max-width var(--report-card-slide-duration) var(--report-card-slide-easing),
+    margin-left var(--report-card-slide-duration) var(--report-card-slide-easing),
+    transform var(--report-card-slide-duration) var(--report-card-slide-easing);
+}
+
+.employee-card-panel.open {
+  transform: translateX(0);
+}
+
+.list-content-layout.report-settings-layout .employee-card-panel.report-card-panel.open,
+.list-content-layout.entity-split-layout .employee-card-panel.list-card-panel.open {
+  flex-basis: calc(75% - 8px);
+  max-width: calc(75% - 8px);
+  margin-left: 8px;
+  border: 1px solid var(--modal-border) !important;
+  pointer-events: auto;
+  transform: translateX(0);
+  box-shadow: none;
+  outline: none;
+  transition:
+    flex-basis var(--report-card-slide-duration) var(--report-card-slide-easing),
+    max-width var(--report-card-slide-duration) var(--report-card-slide-easing),
+    margin-left var(--report-card-slide-duration) var(--report-card-slide-easing),
+    transform var(--report-card-slide-duration) var(--report-card-slide-easing);
+}
+
+.list-content-layout.report-settings-layout .employee-card-panel.report-card-panel.open::after,
+.list-content-layout.entity-split-layout .employee-card-panel.list-card-panel.open::after {
+  content: none;
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--modal-border);
+  pointer-events: none;
+  z-index: 90;
+}
+
+.employee-card-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 18px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--modal-border);
+}
+
+.employee-card-panel-header h2 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 28px;
+  color: var(--main-text);
+}
+
+.employee-card-close-button {
+  border: none;
+  background: transparent;
+  color: var(--main-text);
+  font-size: 24px;
+  line-height: 24px;
+  padding: 0;
+  cursor: pointer;
+}
+
+.employee-card-panel-body {
+  padding: 16px 24px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  flex: 1;
+}
+
+.employee-card-panel-body > .employee-card-tabs {
+  flex-shrink: 0;
+}
+
+.employee-card-tabs {
+  display: flex;
+  gap: 12px;
+  border-bottom: 1px solid var(--modal-border);
+  padding-bottom: 12px;
+}
+
+.employee-card-tab {
+  border: 1px solid var(--modal-border);
+  border-radius: 6px;
+  background: var(--main-bg);
+  color: var(--main-text);
+  padding: 6px 15px;
+  font-size: 13px;
+  line-height: 16px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.employee-card-tab:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.employee-card-tab.active {
+  background: #d0e9ff;
+  border-color: #8dc7ff;
+}
+
+.content-area.dark .employee-card-tab.active {
+  background: #5e6d7e;
+  border-color: #788696ff;
+}
+
+.employee-card-tabs.employee-card-tabs-report-style {
+  gap: 2px;
+  padding-bottom: 0;
+}
+
+.employee-card-tabs.employee-card-tabs-report-style .employee-card-tab {
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--main-text) 85%, transparent);
+  padding: 8px 12px;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+  cursor: pointer;
+  margin-bottom: -1px;
+}
+
+.employee-card-tabs.employee-card-tabs-report-style .employee-card-tab.active {
+  color: #1f5fbf;
+  border-bottom-color: #1f5fbf;
+  background: transparent;
+}
+
+.content-area.dark .employee-card-tabs.employee-card-tabs-report-style .employee-card-tab.active {
+  color: #93ccff;
+  border-bottom-color: #93ccff;
+}
+
+.report-card-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--modal-border);
+  padding-bottom: 0;
+}
+
+.report-card-tab {
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--main-text) 85%, transparent);
+  padding: 8px 12px;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: -1px;
+}
+
+.report-card-tab:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.report-card-tab.active {
+  color: #1f5fbf;
+  border-bottom-color: #1f5fbf;
+}
+
+.content-area.dark .report-card-tab.active {
+  color: #93ccff;
+  border-bottom-color: #93ccff;
+}
+
+.employee-card-main-tab-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
+
+.report-card-tab-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+.report-card-tab-content.is-hidden,
+.employee-card-main-tab-content.report-card-main-tab-content.is-hidden {
+  display: none;
+}
+
+.report-card-sql-section {
+  flex: 1;
+  min-height: 0;
+  padding-left: 24px;
+  padding-right: 24px;
+}
+
+.report-card-sql-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.report-card-sql-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.report-card-sql-caret-info {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--main-text) 82%, transparent);
+  margin-right: 4px;
+  white-space: nowrap;
+}
+
+.report-card-sql-view-button.is-active {
+  background: #d4e6fb;
+  border-color: #9fc3f4;
+  color: #0f3f87;
+}
+
+.content-area.dark .report-card-sql-view-button.is-active {
+  background: #3663aaff;
+  border-color: #5f8fd7;
+  color: #f2f3f4;
+}
+
+.report-card-sql-zoom-button {
+  min-width: 28px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.report-card-sql-layout {
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  overflow: hidden;
+}
+
+.report-card-sql-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  transition: flex-basis 180ms ease;
+}
+.report-card-sql-main-view {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+.report-card-sql-main-view.is-hidden {
+  display: none;
+}
+
+.report-card-sql-main > .report-card-sql-code,
+.report-card-sql-main > .report-card-sql-editor-wrapper,
+.report-card-sql-main > .report-sql-results-wrapper,
+.report-card-sql-main-view > .report-card-sql-code,
+.report-card-sql-main-view > .report-card-sql-editor-wrapper,
+.report-card-sql-main-view > .report-sql-results-wrapper {
+  flex: 1;
+  min-height: 320px;
+  height: 100%;
+}
+
+.report-card-sql-code {
+  width: 100%;
+  flex: 1;
+  min-height: 320px;
+  margin: 0;
+  box-sizing: border-box;
+  border: 1px solid var(--modal-border);
+  border-radius: 8px;
+  background: var(--main-bg);
+  color: var(--main-text);
+  padding: 12px;
+  font-family: "PT Root UI", Arial, sans-serif;
+  font-size: var(--sql-font-size-px, 13px);
+  line-height: var(--sql-line-height-px, 18px);
+  overflow: auto;
+  white-space: pre;
+}
+
+.report-card-sql-code code {
+  font-family: "PT Root UI", Arial, sans-serif;
+}
+
+.report-card-sql-editor-wrapper {
+  --sql-gutter-width: 48px;
+  position: relative;
+  width: 100%;
+  flex: 1;
+  min-height: 320px;
+  border: 1px solid var(--modal-border);
+  border-radius: 8px;
+  background: var(--main-bg);
+  overflow: hidden;
+}
+
+.report-card-sql-editor-wrapper.is-editing {
+  border-color: #3663aaff;
+  box-shadow: 0 0 0 2px rgba(54, 99, 170, 0.2);
+}
+
+.report-card-sql-editor-wrapper.is-editing::after {
+  content: "Режим редактирования";
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(54, 99, 170, 0.14);
+  color: #1f4f97;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 600;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.report-card-sql-active-line {
+  position: absolute;
+  left: calc(var(--sql-gutter-width) + 1px);
+  right: 1px;
+  height: var(--sql-line-height-px, 18px);
+  border-radius: 3px;
+  background: rgba(29, 78, 216, 0.12);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.report-card-sql-gutter {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: var(--sql-gutter-width);
+  margin: 0;
+  box-sizing: border-box;
+  border-right: 1px solid var(--modal-border);
+  background: color-mix(in srgb, var(--main-bg) 92%, var(--modal-border) 8%);
+  color: color-mix(in srgb, var(--main-text) 55%, transparent);
+  padding: 12px 8px 12px 0;
+  font-family: "PT Root UI", Arial, sans-serif;
+  font-size: var(--sql-font-size-px, 13px);
+  line-height: var(--sql-line-height-px, 18px);
+  text-align: right;
+  overflow: hidden;
+  user-select: none;
+  pointer-events: auto;
+  cursor: pointer;
+  white-space: pre;
+  z-index: 3;
+}
+
+.report-card-sql-highlight {
+  position: absolute;
+  left: var(--sql-gutter-width);
+  right: 0;
+  top: 0;
+  bottom: 0;
+  margin: 0;
+  box-sizing: border-box;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--main-text);
+  padding: 12px;
+  font-family: "PT Root UI", Arial, sans-serif;
+  font-size: var(--sql-font-size-px, 13px);
+  line-height: var(--sql-line-height-px, 18px);
+  font-variant-ligatures: none;
+  overflow: auto;
+  white-space: pre;
+  pointer-events: none;
+  z-index: 3;
+}
+
+.report-card-sql-highlight code {
+  font-family: "PT Root UI", Arial, sans-serif;
+}
+
+.report-card-sql-editor {
+  position: absolute;
+  left: var(--sql-gutter-width);
+  right: 0;
+  top: 0;
+  bottom: 0;
+  margin: 0;
+  box-sizing: border-box;
+  border: none;
+  border-radius: 0;
+  background: transparent !important;
+  color: transparent !important;
+  -webkit-text-fill-color: transparent;
+  caret-color: var(--main-text);
+  padding: 12px;
+  font-family: "PT Root UI", Arial, sans-serif;
+  font-size: var(--sql-font-size-px, 13px);
+  line-height: var(--sql-line-height-px, 18px);
+  font-variant-ligatures: none;
+  resize: none;
+  overflow: auto;
+  white-space: pre;
+  z-index: 4;
+}
+
+.report-card-sql-editor:focus {
+  outline: none;
+}
+
+.report-sql-results-wrapper {
+  width: 100%;
+  flex: 1;
+  min-height: 320px;
+  border: 1px solid var(--modal-border);
+  border-radius: 8px;
+  background: var(--main-bg);
+  overflow: auto;
+  position: relative;
+}
+
+.report-sql-results-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+
+.report-sql-results-table th,
+.report-sql-results-table td {
+  border-bottom: 1px solid var(--modal-border);
+  border-right: 1px solid var(--modal-border);
+  padding: 8px 10px;
+  font-size: var(--sql-font-size-px, 12px);
+  line-height: var(--sql-line-height-px, 16px);
+  white-space: nowrap;
+  text-align: left;
+  vertical-align: top;
+}
+
+.report-sql-results-table th:last-child,
+.report-sql-results-table td:last-child {
+  border-right: none;
+}
+
+.report-sql-results-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--modal-bg);
+  font-weight: 600;
+}
+
+.report-sql-results-table .column-sort-button {
+  padding: 6px 8px;
+  font-weight: 600;
+}
+
+.report-sql-results-row-number-header,
+.report-sql-results-row-number-cell {
+  width: 64px;
+  min-width: 64px;
+  max-width: 64px;
+  text-align: center;
+}
+
+.report-sql-results-row-number-header {
+  left: 0;
+  z-index: 3;
+}
+
+.report-sql-results-loader,
+.report-sql-results-empty-state {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  color: var(--main-text);
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.report-sql-results-loading-more {
+  padding: 10px 12px;
+  text-align: center;
+  font-size: var(--sql-font-size-px, 12px);
+  line-height: var(--sql-line-height-px, 16px);
+  color: color-mix(in srgb, var(--main-text) 72%, transparent);
+}
+
+.content-area.dark .report-card-sql-active-line {
+  background: rgba(147, 197, 253, 0.14);
+}
+
+.content-area.dark .report-card-sql-editor-wrapper.is-editing {
+  border-color: #93ccffff;
+  box-shadow: 0 0 0 2px rgba(147, 204, 255, 0.2);
+}
+
+.content-area.dark .report-card-sql-editor-wrapper.is-editing::after {
+  background: rgba(147, 204, 255, 0.18);
+  color: #d7ecff;
+}
+
+.content-area.dark .report-card-sql-gutter {
+  background: color-mix(in srgb, var(--main-bg) 90%, var(--modal-border) 10%);
+}
+
+.report-card-sql-code .token.comment,
+.report-card-sql-highlight .token.comment {
+  color: #6b7280;
+}
+
+.report-card-sql-code .token.keyword {
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.report-card-sql-highlight .token.keyword {
+  color: #1d4ed8;
+  font-weight: 400;
+}
+
+.report-card-sql-code .token.string,
+.report-card-sql-highlight .token.string {
+  color: #b45309;
+}
+
+.report-card-sql-code .token.number,
+.report-card-sql-highlight .token.number {
+  color: #0f766e;
+}
+
+.report-card-sql-code .token.operator,
+.report-card-sql-code .token.punctuation,
+.report-card-sql-highlight .token.operator,
+.report-card-sql-highlight .token.punctuation {
+  color: #334155;
+}
+
+.content-area.dark .report-card-sql-code .token.comment,
+.content-area.dark .report-card-sql-highlight .token.comment {
+  color: #94a3b8;
+}
+
+.content-area.dark .report-card-sql-code .token.keyword,
+.content-area.dark .report-card-sql-highlight .token.keyword {
+  color: #93c5fd;
+}
+
+.content-area.dark .report-card-sql-code .token.string,
+.content-area.dark .report-card-sql-highlight .token.string {
+  color: #fcd34d;
+}
+
+.content-area.dark .report-card-sql-code .token.number,
+.content-area.dark .report-card-sql-highlight .token.number {
+  color: #5eead4;
+}
+
+.content-area.dark .report-card-sql-code .token.operator,
+.content-area.dark .report-card-sql-code .token.punctuation,
+.content-area.dark .report-card-sql-highlight .token.operator,
+.content-area.dark .report-card-sql-highlight .token.punctuation {
+  color: #cbd5e1;
+}
+
+.report-card-sql-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.report-card-sql-actions-left {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.report-card-sql-actions-right {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--main-text) 82%, transparent);
+}
+
+.report-template-settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  flex: 1;
+}
+
+.report-preview-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  flex: 1;
+}
+
+.report-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.report-preview-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.report-preview-stats {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--main-text) 82%, transparent);
+}
+
+.report-preview-note {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--main-text) 76%, transparent);
+}
+
+.report-preview-note-warning {
+  color: #b45309;
+  font-weight: 600;
+}
+
+.content-area.dark .report-preview-note-warning {
+  color: #86efac;
+}
+
+.report-preview-viewer {
+  flex: 1;
+  min-height: 320px;
+  border: 1px solid var(--modal-border);
+  border-radius: 8px;
+  overflow: auto;
+  background: var(--main-bg);
+}
+
+.report-preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+
+.report-preview-table th,
+.report-preview-table td {
+  border-bottom: 1px solid var(--modal-border);
+  border-right: 1px solid var(--modal-border);
+  padding: 8px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  line-height: 18px;
+}
+
+.report-preview-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--modal-bg);
+}
+
+.report-preview-table th:last-child,
+.report-preview-table td:last-child {
+  border-right: none;
+}
+
+.report-preview-row-number-header,
+.report-preview-row-number-cell {
+  width: 64px;
+  min-width: 64px;
+  max-width: 64px;
+  text-align: center;
+}
+
+.report-preview-empty-state {
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.report-template-loading-state {
+  padding: 16px 0;
+}
+
+.report-template-content-shell {
+  position: relative;
+  min-height: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.report-template-loading-overlay {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.report-template-loading-overlay-text {
+  padding: 6px 10px;
+  border: 1px solid var(--modal-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--modal-bg) 94%, transparent);
+  color: var(--main-text);
+  font-size: 12px;
+  line-height: 14px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14);
+}
+
+.report-template-top-grid {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 12px;
+}
+
+.report-template-logo-card,
+.report-template-general-card,
+.report-template-fields-card {
+  border: 1px solid var(--modal-border);
+  border-radius: 8px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--modal-bg) 92%, transparent);
+}
+
+.report-template-logo-card,
+.report-template-general-card {
+  min-height: 250px;
+}
+
+.report-template-top-grid .report-template-logo-card,
+.report-template-top-grid .report-template-general-card {
+  min-height: 0;
+  height: 100%;
+}
+
+.report-template-top-grid .report-template-logo-card,
+.report-template-top-grid .report-template-general-card,
+.report-template-fields-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.report-template-logo-card h4,
+.report-template-general-card h4,
+.report-template-fields-card h4 {
+  margin: 0 0 10px;
+  font-size: 14px;
+  line-height: 18px;
+}
+
+.report-template-logo-uploader {
+  width: 100%;
+  height: 150px;
+  border: 1px dashed var(--modal-border);
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--main-bg);
+}
+
+.report-template-logo-uploader.editable {
+  cursor: pointer;
+}
+
+.report-template-logo-clear-button {
+  margin-top: 8px;
+}
+
+.report-template-logo-uploader img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.report-template-logo-placeholder {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--main-text) 72%, transparent);
+}
+
+.report-template-general-table-wrapper {
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: 228px;
+  border: 1px solid var(--modal-border);
+  border-radius: 8px;
+}
+
+.report-template-top-grid .report-template-general-table-wrapper {
+  flex: 1;
+  max-height: none;
+  min-height: 120px;
+}
+
+.report-template-general-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.report-template-general-table th,
+.report-template-general-table td {
+  border-bottom: 1px solid var(--modal-border);
+  border-right: 1px solid var(--modal-border);
+  padding: 6px 8px;
+  font-size: 14px;
+  line-height: 16px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.report-template-general-table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--modal-bg);
+  padding: 0;
+  text-align: center;
+}
+
+.report-template-general-table th:last-child,
+.report-template-general-table td:last-child {
+  border-right: none;
+}
+
+.report-template-general-sort-button {
+  min-height: 30px;
+  padding: 6px 8px;
+  font-weight: 600;
+  justify-content: center;
+  text-align: center;
+}
+
+.report-template-color-input-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.report-template-color-picker {
+  width: 34px;
+  min-width: 34px;
+  height: 30px;
+  border: 1px solid var(--modal-border);
+  border-radius: 6px;
+  background: transparent;
+  padding: 2px;
+  cursor: pointer;
+}
+
+.report-template-fields-table-wrapper {
+  overflow: auto;
+  max-height: 360px;
+  margin-top: 8px;
+}
+
+.report-template-fields-card .report-template-fields-table-wrapper {
+  flex: 1;
+  max-height: none;
+  min-height: 140px;
+}
+
+.report-template-fields-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.report-template-fields-header h4 {
+  margin: 0;
+}
+
+.report-template-fields-table {
+  width: auto;
+  min-width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.report-template-fields-table th,
+.report-template-fields-table td {
+  border-bottom: 1px solid var(--modal-border);
+  border-right: 1px solid var(--modal-border);
+  padding: 8px;
+  vertical-align: middle;
+  font-size: 14px;
+  line-height: 18px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.report-template-fields-table th {
+  position: sticky;
+  top: 0;
+  background: var(--modal-bg);
+  z-index: 2;
+  padding: 0;
+  overflow: hidden;
+}
+
+.report-template-fields-table .column-sort-button {
+  padding: 8px;
+  font-weight: 600;
+  min-height: 34px;
+}
+
+.report-template-fields-table .column-resize-handle {
+  right: 0;
+  width: 6px;
+}
+
+.report-template-fields-table td .employee-card-field-input,
+.report-template-fields-table td .employee-card-field-select {
+  max-width: 100%;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.report-template-fields-table th:last-child,
+.report-template-fields-table td:last-child {
+  border-right: none;
+}
+
+.report-template-field-name-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 18px;
+  max-width: 100%;
+  width: 100%;
+}
+
+.report-template-field-name-cell span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-template-cell-overflow-text {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-template-row-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  min-width: 16px;
+  cursor: grab;
+  user-select: none;
+  color: color-mix(in srgb, var(--main-text) 72%, transparent);
+  line-height: 1;
+}
+
+.report-template-row-drag-handle[draggable="false"] {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.report-template-row-drag-handle:active {
+  cursor: grabbing;
+}
+
+.report-template-fields-row-hidden td {
+  background: color-mix(in srgb, var(--modal-bg) 88%, transparent);
+  color: color-mix(in srgb, var(--main-text) 62%, transparent);
+}
+
+.report-template-field-width-input-disabled {
+  background: color-mix(in srgb, var(--main-bg) 86%, var(--modal-border) 14%);
+  color: color-mix(in srgb, var(--main-text) 60%, transparent);
+  cursor: not-allowed;
+}
+
+.content-area.dark .report-template-fields-row-hidden td {
+  background: color-mix(in srgb, var(--modal-bg) 82%, transparent);
+  color: color-mix(in srgb, var(--main-text) 68%, transparent);
+}
+
+.report-template-field-drag-preview {
+  position: fixed;
+  top: -9999px;
+  left: -9999px;
+  max-width: 320px;
+  padding: 6px 10px;
+  border: 1px solid #000;
+  border-radius: 6px;
+  background: #000;
+  color: #fff;
+  font-size: 14px;
+  line-height: 18px;
+  font-weight: 600;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.18);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  z-index: 9999;
+}
+
+.report-template-settings-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.report-template-sql-sync-indicator {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  margin-right: 4px;
+}
+
+.report-template-content-slider {
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.report-template-content-track {
+  width: 200%;
+  height: 100%;
+  display: flex;
+  transform: translateX(0);
+  transition: transform 240ms ease;
+}
+
+.report-template-content-slider.is-json .report-template-content-track {
+  transform: translateX(-50%);
+}
+
+.report-template-content-pane {
+  width: 50%;
+  min-width: 50%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.report-template-content-pane-settings {
+  gap: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+}
+
+.report-template-level-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.report-template-level-section-three {
+  margin-top: 0;
+}
+
+.report-template-level-gap {
+  flex: 0 0 auto;
+  height: 10px;
+}
+
+.report-template-level-gap.is-collapsed {
+  height: 2px;
+}
+
+.report-template-level-toggle {
+  width: 100%;
+  border: 1px solid var(--modal-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--modal-bg) 92%, transparent);
+  color: var(--main-text);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  font-size: 14px;
+  line-height: 18px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+
+.report-template-level-toggle:hover {
+  background: color-mix(in srgb, var(--main-bg) 88%, transparent);
+}
+
+.report-template-level-toggle-inline {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.report-template-level-toggle-icon {
+  width: 12px;
+  min-width: 12px;
+  text-align: center;
+  line-height: 12px;
+  font-size: 12px;
+}
+
+
+.report-template-json-panel {
+  --json-font-size-px: 13px;
+  --json-line-height-px: 18px;
+  min-height: 0;
+  flex: 1;
+  border: 1px solid var(--modal-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--modal-bg) 92%, transparent);
+  padding: 12px;
+  display: flex;
+  position: relative;
+  overflow: hidden;
+}
+
+.report-template-json-panel.is-editing::after {
+  content: "Режим редактирования";
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(54, 99, 170, 0.14);
+  color: #1f4f97;
+  font-size: 11px;
+  line-height: 16px;
+  font-weight: 600;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.report-template-json-active-line {
+  position: absolute;
+  left: 13px;
+  right: 13px;
+  height: var(--json-line-height-px, 18px);
+  border-radius: 3px;
+  background: rgba(29, 78, 216, 0.12);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.report-template-json-gutter {
+  position: absolute;
+  left: 13px;
+  top: 13px;
+  bottom: 13px;
+  width: 48px;
+  box-sizing: border-box;
+  border-right: 1px solid var(--modal-border);
+  pointer-events: none;
+  z-index: 3;
+  overflow: hidden;
+}
+
+.report-template-json-gutter-content {
+  margin: 0;
+  box-sizing: border-box;
+  color: color-mix(in srgb, var(--main-text) 55%, transparent);
+  padding: 10px 8px 10px 0;
+  text-align: right;
+  font-size: var(--json-font-size-px, 13px);
+  line-height: var(--json-line-height-px, 18px);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  white-space: pre;
+  will-change: transform;
+}
+
+.report-template-json-textarea {
+  width: 100%;
+  min-height: 100%;
+  resize: none;
+  box-sizing: border-box;
+  border: 1px solid var(--modal-border);
+  border-radius: 8px;
+  background: var(--main-bg);
+  color: var(--main-text);
+  font-size: var(--json-font-size-px, 13px);
+  line-height: var(--json-line-height-px, 18px);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  padding: 10px 12px;
+  position: relative;
+  z-index: 2;
+}
+
+.report-template-json-textarea:read-only {
+  background: color-mix(in srgb, var(--main-bg) 90%, transparent);
+}
+
+.report-template-json-textarea.is-editing {
+  border-color: #4d8de8;
+  box-shadow: 0 0 0 1px rgba(77, 141, 232, 0.35);
+  background: rgba(208, 233, 255, 0.22);
+  padding-left: 64px;
+}
+
+.content-area.dark .report-template-json-textarea.is-editing {
+  border-color: #77b2ff;
+  box-shadow: 0 0 0 1px rgba(119, 178, 255, 0.45);
+  background: rgba(93, 126, 167, 0.3);
+}
+
+.content-area.dark .report-template-json-panel.is-editing::after {
+  background: rgba(147, 204, 255, 0.18);
+  color: #d7ecff;
+}
+
+.content-area.dark .report-template-json-active-line {
+  background: rgba(147, 197, 253, 0.14);
+}
+
+.content-area.dark .report-template-json-gutter {
+  border-right-color: var(--modal-border);
+}
+
+.content-area.dark .report-template-json-gutter-content {
+  color: color-mix(in srgb, var(--main-text) 62%, transparent);
+}
+
+.employee-card-relations-tab-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  flex: 1;
+}
+
+.employee-card-relations-table-wrapper {
+  margin-top: 8px;
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+}
+
+/* Карточка организации: лёгкий признак фонового обновления (без opacity на всей таблице — меньше мигания) */
+.employee-card-relations-table-wrapper.employee-card-relations-table-wrapper--stale-refresh {
+  position: relative;
+}
+
+.employee-card-relations-table-wrapper.employee-card-relations-table-wrapper--stale-refresh::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.content-area.dark
+  .employee-card-relations-table-wrapper.employee-card-relations-table-wrapper--stale-refresh::before {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.employee-card-relations-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.employee-card-relations-table th,
+.employee-card-relations-table td {
+  border-bottom: 1px solid var(--modal-border);
+  padding: 8px 9px;
+  text-align: left;
+  font-size: 13px;
+  line-height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.employee-card-relations-table th {
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--modal-bg);
+  padding: 0;
+}
+
+.employee-card-relations-sort-button {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--main-text);
+  font: inherit;
+  font-weight: 600;
+  text-align: left;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 8px 9px;
+}
+
+.employee-card-relations-sort-button.active {
+  color: #243bb5;
+}
+
+.content-area.dark .employee-card-relations-sort-button.active {
+  color: #f0d05dff;
+}
+
+.employee-card-relations-sort-icon {
+  font-size: 12px;
+  line-height: 12px;
+}
+
+.employee-card-relations-filter-row th {
+  padding: 8px 9px;
+  top: 32px;
+  z-index: 1;
+}
+
+.employee-card-relations-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 3;
+}
+
+.organization-dadata-table-wrapper {
+  margin-top: 8px;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--modal-border);
+  border-radius: 8px;
+}
+
+.organization-dadata-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.organization-dadata-table th,
+.organization-dadata-table td {
+  border-bottom: 1px solid var(--modal-border);
+  padding: 8px 9px;
+  text-align: left;
+  font-size: 13px;
+  line-height: 16px;
+  vertical-align: top;
+}
+
+.organization-dadata-table th {
+  font-weight: 600;
+  background: var(--modal-bg);
+}
+
+.organization-dadata-table td:first-child {
+  width: 240px;
+  word-break: break-word;
+}
+
+.organization-dadata-table td:last-child {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.organization-dadata-array-section {
+  margin-top: 12px;
+}
+
+.organization-dadata-level-toggle {
+  margin-bottom: 6px;
+}
+
+.organization-dadata-sticky-header {
+  position: sticky;
+  top: -10px;
+  z-index: 5;
+  background: var(--modal-bg);
+  padding: 8px 0 6px;
+  margin: -8px 0 6px;
+}
+
+.organization-dadata-visible-only-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 14px;
+  color: var(--main-text);
+  user-select: none;
+}
+
+.organization-dadata-visible-only-toggle input {
+  margin: 0;
+}
+
+.organization-dadata-attribute-toggle {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 6px;
+  user-select: none;
+}
+
+.organization-dadata-attribute-toggle input {
+  margin: 2px 0 0;
+}
+
+.organization-dadata-row-mismatch td {
+  background: rgba(250, 203, 108, 0.28);
+}
+
+.organization-dadata-row-selected td {
+  background: #d0e9ff;
+}
+
+.organization-dadata-row-selected:hover td {
+  background: #d0e9ff;
+}
+
+.content-area.dark .organization-dadata-row-selected td {
+  background: #3663aa;
+  color: #ffffff;
+}
+
+.content-area.dark .organization-dadata-row-selected:hover td {
+  background: #3663aa;
+  color: #ffffff;
+}
+
+.organization-dadata-row-draggable td {
+  transition: background-color 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
+}
+
+.organization-dadata-row-draggable td:first-child,
+.organization-dadata-row-draggable td:first-child * {
+  cursor: grab;
+  user-select: none;
+}
+
+.organization-dadata-row-draggable .organization-dadata-attribute-toggle input,
+.organization-dadata-row-draggable:active .organization-dadata-attribute-toggle input,
+.organization-dadata-row-draggable.organization-dadata-row-dragging .organization-dadata-attribute-toggle input {
+  cursor: pointer !important;
+}
+
+.organization-dadata-row-draggable:active td:first-child,
+.organization-dadata-row-draggable:active td:first-child * {
+  cursor: grabbing;
+}
+
+.organization-dadata-row-draggable.organization-dadata-row-dragging td:first-child,
+.organization-dadata-row-draggable.organization-dadata-row-dragging td:first-child * {
+  cursor: grabbing;
+}
+
+.organization-dadata-row-draggable.organization-dadata-row-dragging td {
+  opacity: 0.78;
+  box-shadow: inset 0 0 0 1px var(--accent-color);
+}
+
+.organization-card-structure-tab .organization-card-structure-layout {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  gap: 0;
+}
+
+.organization-card-structure-pane--subdivisions,
+.organization-card-structure-pane--employees {
+  min-height: 0;
+  min-width: 0;
+}
+
+.organization-card-structure-panes-resizer {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 10px;
+  width: 10px;
+  max-width: 10px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+  align-self: stretch;
+  min-height: 120px;
+  flex-shrink: 0;
+}
+
+.organization-card-structure-panes-resizer:hover,
+.organization-card-structure-panes-resizer:focus-visible {
+  background: color-mix(in srgb, var(--link-color) 12%, transparent);
+}
+
+.organization-card-structure-panes-resizer::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 12px;
+  bottom: 12px;
+  width: 3px;
+  transform: translateX(-50%);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--modal-border) 75%, var(--main-text) 25%);
+  pointer-events: none;
+}
+
+.organization-card-structure-pane {
+  min-width: 0;
+}
+
+.organization-card-structure-tab .organization-card-structure-pane {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Вкладка «Структура»: контент тянется до низа области вкладки, скролл только у таблицы */
+.employee-card-main-tab-content.organization-card-structure-tab {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.employee-card-main-tab-content.organization-card-structure-tab .organization-card-structure-section {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.employee-card-main-tab-content.organization-card-structure-tab
+  .organization-card-structure-section
+  .employee-card-section-header {
+  flex-shrink: 0;
+}
+
+.organization-card-structure-tab .organization-card-structure-placeholder {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.organization-card-structure-section .employee-card-section-header {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.organization-card-structure-error {
+  margin: 0 0 8px;
+  color: #b00020;
+  font-size: 13px;
+}
+
+.content-area.dark .organization-card-structure-error {
+  color: #ff8a8a;
+}
+
+.organization-card-structure-table-wrapper {
+  overflow-x: hidden;
+  overflow-y: auto;
+  border: 1px solid var(--modal-border);
+  border-radius: 8px;
+  background: var(--main-bg);
+  isolation: isolate;
+  -webkit-overflow-scrolling: touch;
+}
+
+.organization-card-structure-tab .organization-card-structure-table-wrapper {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.organization-card-structure-table {
+  width: 100%;
+  max-width: 100%;
+  /* collapse ломает sticky у th в скролле; separate + spacing 0 сохраняет сетку */
+  border-collapse: separate;
+  border-spacing: 0;
+  table-layout: fixed;
+  font-size: 13px;
+  color: var(--main-text);
+}
+
+.organization-card-structure-table th,
+.organization-card-structure-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--modal-border);
+  vertical-align: middle;
+  box-sizing: border-box;
+}
+
+.organization-card-structure-th-resizable {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  font-weight: 600;
+  /* непрозрачный фон — строки tbody не «просвечивают» над шапкой при скролле */
+  background: color-mix(in srgb, var(--main-bg) 92%, var(--modal-border) 8%);
+  box-shadow: 0 1px 0 var(--modal-border);
+  padding-right: 12px;
+}
+
+.organization-card-structure-th-label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 4px;
+}
+
+.organization-card-structure-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -3px;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 5;
+}
+
+.organization-card-structure-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.organization-card-structure-root-row td {
+  font-weight: 600;
+  background: rgba(127, 127, 127, 0.06);
+}
+
+.content-area.dark .organization-card-structure-root-row td {
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.organization-card-structure-row-selectable td {
+  transition: background-color 120ms ease;
+}
+
+.organization-card-structure-row-selectable:not(.organization-card-structure-row-selected):hover td {
+  background: color-mix(in srgb, var(--link-color) 12%, var(--main-bg));
+}
+
+.organization-card-structure-root-row.organization-card-structure-row-selectable:not(
+    .organization-card-structure-row-selected
+  ):hover
+  td {
+  background: color-mix(in srgb, var(--link-color) 12%, rgba(127, 127, 127, 0.06));
+}
+
+.content-area.dark
+  .organization-card-structure-root-row.organization-card-structure-row-selectable:not(
+    .organization-card-structure-row-selected
+  ):hover
+  td {
+  background: color-mix(in srgb, var(--link-color) 14%, rgba(0, 0, 0, 0.12));
+}
+
+.organization-card-structure-row-selected td {
+  background: #d0e9ff;
+}
+
+.organization-card-structure-row-selected:hover td {
+  background: #d0e9ff;
+}
+
+.content-area.dark .organization-card-structure-row-selected td {
+  background: #3663aa;
+  color: #ffffff;
+}
+
+.content-area.dark .organization-card-structure-row-selected:hover td {
+  background: #3663aa;
+  color: #ffffff;
+}
+
+.organization-card-structure-root-row.organization-card-structure-row-selectable {
+  cursor: pointer;
+}
+
+.organization-card-structure-root-row.organization-card-structure-row-selectable td {
+  cursor: pointer;
+}
+
+.organization-card-structure-status-cell {
+  text-align: center;
+  color: var(--muted-text, var(--modal-text));
+  font-size: 13px;
+}
+
+.organization-card-structure-table th.organization-card-structure-actions-col {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--main-bg) 92%, var(--modal-border) 8%);
+  box-shadow: 0 1px 0 var(--modal-border);
+}
+
+.organization-card-structure-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.organization-card-structure-name-cell {
+  font-weight: 500;
+}
+
+.organization-card-structure-name-cell-inner {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.organization-card-structure-tree-toggle {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.organization-card-structure-tree-toggle:hover {
+  background: color-mix(in srgb, var(--link-color) 18%, transparent);
+}
+
+.organization-card-structure-tree-toggle:focus-visible {
+  outline: 2px solid var(--link-color);
+  outline-offset: 1px;
+}
+
+.organization-card-structure-tree-toggle-spacer {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  display: inline-block;
+  pointer-events: none;
+}
+
+.organization-card-structure-name-text {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.organization-card-structure-row-draggable td {
+  transition: background-color 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
+}
+
+.organization-card-structure-row-draggable td:first-child,
+.organization-card-structure-row-draggable td:first-child .organization-card-structure-name-text {
+  cursor: grab;
+  user-select: none;
+}
+
+.organization-card-structure-row-draggable .organization-card-structure-tree-toggle {
+  cursor: pointer;
+  user-select: none;
+}
+
+.organization-card-structure-row-draggable:active td:first-child,
+.organization-card-structure-row-draggable:active td:first-child .organization-card-structure-name-text {
+  cursor: grabbing;
+}
+
+.organization-card-structure-row-draggable.organization-card-structure-row-dragging td:first-child,
+.organization-card-structure-row-draggable.organization-card-structure-row-dragging
+  td:first-child
+  .organization-card-structure-name-text {
+  cursor: grabbing;
+}
+
+.organization-card-structure-row-draggable.organization-card-structure-row-dragging td {
+  opacity: 0.78;
+  box-shadow: inset 0 0 0 1px var(--link-color);
+}
+
+.organization-card-structure-root-row.organization-card-structure-drop-target td,
+.organization-card-structure-row-draggable.organization-card-structure-drop-target td {
+  background: color-mix(in srgb, var(--link-color) 14%, var(--main-bg));
+  box-shadow: inset 0 0 0 2px var(--link-color);
+}
+
+.organization-card-structure-actions-col {
+  width: 88px;
+}
+
+.organization-card-structure-actions-cell {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.organization-card-structure-placeholder {
+  margin: 0;
+  padding: 16px;
+  font-size: 13px;
+  color: var(--muted-text, var(--modal-text));
+  opacity: 0.85;
+  border: 1px dashed var(--modal-border);
+  border-radius: 8px;
+  min-height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.organization-card-structure-tab .organization-card-structure-pane .organization-card-structure-employees-section {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.organization-card-structure-employees-header {
+  flex-shrink: 0;
+}
+
+.organization-card-structure-employees-h3 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 0.15em;
+}
+
+.organization-card-structure-employees-h3-main {
+  flex: 0 0 auto;
+}
+
+.organization-card-structure-employees-title-parenthetical {
+  font-weight: 500;
+  color: var(--muted-text, var(--modal-text));
+  opacity: 0.92;
+}
+
+.organization-card-structure-employees-table-wrap {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  border: 1px solid var(--modal-border);
+  border-radius: 8px;
+  background: var(--main-bg);
+  isolation: isolate;
+  -webkit-overflow-scrolling: touch;
+}
+
+.organization-card-structure-employees-table-wrap.organization-card-structure-employees-table-wrap--stale-refresh {
+  opacity: 0.82;
+  transition: opacity 0.12s ease;
+}
+
+.organization-card-structure-employees-thead {
+  position: relative;
+  z-index: 2;
+}
+
+/* Первая строка шапки: как у .organization-card-structure-table th (8px 10px), без «двойного» padding у кнопки сортировки */
+.organization-card-structure-employees-table thead tr:first-child > th {
+  padding: 8px 10px;
+  position: sticky;
+  top: 0;
+  z-index: 7;
+}
+
+.organization-card-structure-employees-table thead tr:first-child .organization-card-structure-employees-actions-col {
+  background: color-mix(in srgb, var(--main-bg) 92%, var(--modal-border) 8%);
+  box-shadow: 0 1px 0 var(--modal-border);
+}
+
+.organization-card-structure-employees-th {
+  position: relative;
+  font-weight: 600;
+  vertical-align: middle;
+  background: color-mix(in srgb, var(--main-bg) 92%, var(--modal-border) 8%);
+  box-shadow: 0 1px 0 var(--modal-border);
+}
+
+.organization-card-structure-employees-th:has(.organization-card-structure-resize-handle) {
+  padding-right: 12px;
+}
+
+.organization-card-structure-employees-th .column-sort-button {
+  font-weight: 600;
+  padding: 0 6px 0 0;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  min-height: 0;
+  line-height: 1.25;
+}
+
+.organization-card-structure-employees-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: 13px;
+  color: var(--main-text);
+}
+
+.organization-card-structure-employees-table th,
+.organization-card-structure-employees-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--modal-border);
+  vertical-align: middle;
+  box-sizing: border-box;
+}
+
+/* Обрезка + корректный scrollWidth для тултипов при table-layout: fixed */
+.organization-card-structure-employees-table tbody
+  td:not(.organization-card-structure-employees-actions-cell):not(.organization-card-structure-status-cell) {
+  overflow: hidden;
+  max-width: 0;
+}
+
+.organization-card-structure-employees-table .organization-card-structure-name-cell-inner {
+  min-width: 0;
+}
+
+.organization-card-structure-employees-filter-row th {
+  padding: 6px 8px;
+  background: color-mix(in srgb, var(--main-bg) 92%, var(--modal-border) 8%);
+  position: sticky;
+  /* Задаётся из JS (--structure-employees-thead-row1-h), иначе фиксированный top даёт щель и tbody виден между строками */
+  top: var(--structure-employees-thead-row1-h, 2.75rem);
+  z-index: 6;
+  box-shadow: 0 1px 0 var(--modal-border);
+  overflow: visible;
+  vertical-align: middle;
+}
+
+/* DnD сотрудников: дроп в шапку сбрасывает руководителя; во время перетаскивания не перехватывать события сортировки/фильтров */
+.organization-card-structure-employees-table--dnd-active thead .column-sort-button,
+.organization-card-structure-employees-table--dnd-active thead .column-filter-input,
+.organization-card-structure-employees-table--dnd-active thead .column-filter-clear-button,
+.organization-card-structure-employees-table--dnd-active thead .organization-card-structure-resize-handle {
+  pointer-events: none;
+}
+
+.organization-card-structure-employees-thead--drop-target th {
+  background: color-mix(in srgb, var(--link-color) 14%, var(--main-bg));
+  box-shadow: inset 0 0 0 2px var(--link-color);
+}
+
+.organization-card-structure-employees-table tbody tr.organization-card-structure-row-draggable {
+  cursor: grab;
+}
+
+.organization-card-structure-employees-table tbody tr.organization-card-structure-row-dragging {
+  cursor: grabbing;
+}
+
+.organization-card-structure-employees-table tbody tr.organization-card-structure-employees-row-selected td {
+  background: #d0e9ff;
+}
+
+.organization-card-structure-employees-table tbody tr.organization-card-structure-employees-row-selected:hover td {
+  background: #d0e9ff;
+}
+
+.content-area.dark
+  .organization-card-structure-employees-table
+  tbody
+  tr.organization-card-structure-employees-row-selected
+  td {
+  background: #3663aa;
+  color: #ffffff;
+}
+
+.content-area.dark
+  .organization-card-structure-employees-table
+  tbody
+  tr.organization-card-structure-employees-row-selected:hover
+  td {
+  background: #3663aa;
+  color: #ffffff;
+}
+
+.organization-card-structure-employees-actions-col {
+  width: 88px;
+  text-align: right;
+}
+
+.organization-card-structure-employees-actions-cell {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.organization-card-structure-employees-cell-value {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.organization-structure-employees-tooltip-target {
+  cursor: default;
+}
+
+/* Ссылка на карточку орг/сотрудника: как обычный текст, underline только при наведении */
+a.entity-card-hover-link {
+  cursor: pointer;
+}
+
+.entity-card-hover-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.entity-card-hover-link:hover {
+  color: var(--link-color);
+  text-decoration: underline;
+}
+
+.organization-structure-employees-cell-tooltip {
+  max-width: min(420px, calc(100vw - 20px));
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
+  hyphens: auto;
+}
+
+.organization-structure-employee-link-modal {
+  min-width: min(420px, 92vw);
+  overflow: visible;
+}
+
+.organization-structure-employee-pick-field {
+  position: relative;
+  z-index: 0;
+}
+
+.organization-structure-employee-pick-field--open {
+  z-index: 50;
+}
+
+.organization-structure-employee-pick-anchor {
+  position: relative;
+  width: 100%;
+}
+
+.organization-structure-employee-pick-list {
+  list-style: none;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  margin: 4px 0 0;
+  padding: 0;
+  max-height: 180px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border: 1px solid var(--modal-border);
+  border-radius: 6px;
+  background: var(--main-bg);
+  z-index: 60;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+}
+
+.organization-structure-employee-pick-option {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  color: var(--main-text);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.organization-structure-employee-pick-option:hover {
+  background: #d0e9ff;
+}
+
+.content-area.dark .organization-structure-employee-pick-option:hover {
+  background: #5e6d7e;
+}
+
+.organization-structure-employee-readonly {
+  padding: 8px 10px;
+  font-size: 14px;
+  border: 1px solid var(--modal-border);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--main-bg) 88%, var(--modal-border) 12%);
+}
+
+.organization-structure-editor-modal-title {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.organization-structure-editor-modal-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+  min-width: min(360px, 88vw);
+  overflow: visible;
+}
+
+.organization-structure-editor-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Компактное поле как у select; открытая панель — со скроллом (нативный <select> это не стилизует) */
+.organization-structure-parent-combobox {
+  position: relative;
+  width: 100%;
+}
+
+.organization-structure-parent-combobox-trigger {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  text-align: left;
+  min-height: 34px;
+  padding: 8px 10px;
+  border: 1px solid var(--modal-border);
+  border-radius: 4px;
+  background: var(--main-bg);
+  color: var(--main-text);
+  font-size: 14px;
+  font-family: inherit;
+  line-height: 18px;
+  cursor: pointer;
+}
+
+.organization-structure-parent-combobox-trigger:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.organization-structure-parent-combobox-trigger-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.organization-structure-parent-combobox-chevron {
+  flex-shrink: 0;
+  opacity: 0.55;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.organization-structure-parent-combobox-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 30;
+  max-height: min(280px, 42vh);
+  overflow-y: auto;
+  overflow-x: hidden;
+  border: 1px solid var(--modal-border);
+  border-radius: 8px;
+  background: var(--main-bg);
+  color: var(--main-text);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+  -webkit-overflow-scrolling: touch;
+}
+
+.content-area.dark .organization-structure-parent-combobox-panel {
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55);
+}
+
+.organization-structure-parent-combobox-option {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font-size: 14px;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.organization-structure-parent-combobox-option:hover,
+.organization-structure-parent-combobox-option:focus-visible {
+  background: #d0e9ff;
+  outline: none;
+}
+
+.content-area.dark .organization-structure-parent-combobox-option:hover,
+.content-area.dark .organization-structure-parent-combobox-option:focus-visible {
+  background: #5e6d7e;
+}
+
+.organization-structure-parent-combobox-option.is-selected {
+  background: color-mix(in srgb, var(--accent-color) 22%, transparent);
+  font-weight: 600;
+}
+
+.employee-card-field-value-mismatch {
+  background: rgba(250, 203, 108, 0.28);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+.employee-card-relations-filter-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--modal-border);
+  border-radius: 4px;
+  background: var(--main-bg);
+  color: var(--main-text);
+  padding: 6px 8px;
+  font-size: 13px;
+  line-height: 16px;
+}
+
+.employee-card-relations-actions-header {
+  width: 96px;
+}
+
+.employee-card-relations-actions-cell {
+  white-space: nowrap;
+  text-align: right;
+  padding-right: 0;
+}
+
+.employee-grid th.relations-list-actions-header {
+  width: 96px;
+  min-width: 96px;
+  max-width: 96px;
+  position: static;
+  right: auto;
+  z-index: auto;
+  box-shadow: none;
+}
+
+.employee-grid th.relations-list-actions-filter {
+  width: 96px;
+  min-width: 96px;
+  max-width: 96px;
+  position: static;
+  right: auto;
+  z-index: auto;
+  box-shadow: none;
+}
+
+.employee-grid td.relations-list-actions-cell {
+  width: 96px;
+  min-width: 96px;
+  max-width: 96px;
+  position: static;
+  right: auto;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  overflow: visible;
+  text-overflow: clip;
+  z-index: auto;
+  box-shadow: none;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+
+.relation-editor-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.relation-combobox {
+  position: relative;
+  z-index: 1;
+}
+
+.relation-combobox.open {
+  z-index: 4000;
+}
+
+.relation-combobox-trigger {
+  text-align: left;
+  cursor: pointer;
+  padding-right: 30px;
+}
+
+.relation-combobox-clear-button {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(127, 127, 127, 0.18);
+  color: var(--main-text);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+  z-index: 1913;
+}
+
+.relation-combobox-clear-button:hover {
+  background: rgba(127, 127, 127, 0.28);
+}
+
+/* Открытие списка — крайняя справа; «×» левее (если есть значение). */
+.relation-combobox-open-button {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--main-text);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  z-index: 1914;
+  opacity: 0.9;
+}
+
+.relation-combobox-open-button:hover {
+  opacity: 1;
+  background: rgba(127, 127, 127, 0.14);
+}
+
+.relation-combobox--has-open.relation-combobox--has-clear .relation-combobox-clear-button {
+  right: 36px;
+}
+
+.relation-combobox--has-open .relation-combobox-trigger {
+  padding-right: 38px;
+}
+
+.relation-combobox--has-open.relation-combobox--has-clear .relation-combobox-trigger {
+  padding-right: 64px;
+}
+
+.relation-combobox-menu {
+  position: absolute;
+  z-index: 2605;
+  border: 1px solid var(--modal-border);
+  border-radius: 6px;
+  background: var(--main-bg);
+  padding: 6px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.relation-combobox-menu-portal {
+  z-index: 10020;
+}
+
+.relation-combobox-menu-upward {
+  top: auto;
+}
+
+.relation-combobox-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 480px;
+  overflow: auto;
+  position: relative;
+  z-index: 1;
+}
+
+.relation-combobox-option {
+  -webkit-appearance: none;
+  appearance: none;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: 30px;
+  width: 100%;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--main-text);
+  font-family: "PT Root UI", Arial, sans-serif;
+  font-weight: 400;
+  font-size: 14px;
+  line-height: 1.2;
+  text-align: left;
+  padding: 6px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.relation-combobox-option:hover {
+  border-color: var(--modal-border);
+  background: rgba(127, 127, 127, 0.12);
+}
+
+.relation-combobox-empty {
+  color: var(--muted-text, var(--modal-text, #5a6b78));
+  font-size: 12px;
+  padding: 6px 8px;
+}
+
+.employee-card-relations-edit-row td {
+  position: relative;
+  z-index: 2;
+  overflow: visible;
+  text-overflow: clip;
+  background: #cfddfa;
+  box-shadow: inset 0 0 0 1px rgba(64, 108, 188, 0.4);
+}
+
+.employee-card-relations-edit-row td:focus-within {
+  z-index: 3990;
+}
+
+.employee-card-relations-edit-row .employee-card-relations-filter-input,
+.employee-card-relations-edit-row .employee-card-position-action-button {
+  position: relative;
+  z-index: 3995;
+}
+
+.employee-card-relations-edit-row .employee-card-relations-filter-input,
+.employee-card-relations-edit-row .relation-combobox-trigger {
+  border-color: #4d8de8;
+  box-shadow: 0 0 0 1px rgba(77, 141, 232, 0.35);
+  background: rgba(208, 233, 255, 0.22);
+}
+
+/* Выше триггера (z-index 3995), иначе × не получает клики; absolute сохраняем — иначе кнопка уезжает из поля */
+.employee-card-relations-edit-row .relation-combobox-clear-button {
+  z-index: 4006;
+}
+
+.employee-card-relations-edit-row .relation-combobox-open-button {
+  z-index: 4007;
+}
+
+.content-area.dark .employee-card-relations-edit-row .employee-card-relations-filter-input,
+.content-area.dark .employee-card-relations-edit-row .relation-combobox-trigger {
+  border-color: #77b2ff;
+  box-shadow: 0 0 0 1px rgba(119, 178, 255, 0.45);
+  background: rgba(93, 126, 167, 0.3);
+}
+
+.employee-card-relations-edit-row .relation-combobox-menu {
+  z-index: 4010;
+}
+
+.content-area.dark .employee-card-relations-edit-row td {
+  background: #44546a;
+  box-shadow: inset 0 0 0 1px rgba(160, 188, 232, 0.35);
+}
+
+.employee-card-relations-edit-row td.employee-card-relations-default-flag-cell .employee-card-relations-filter-input {
+  text-align: center;
+  text-align-last: center;
+}
+
+.employee-card-relations-table td.employee-card-relations-actions-cell {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.employee-card-relations-table td.employee-card-relations-default-flag-cell {
+  text-align: center;
+}
+
+.employee-card-relations-table th.employee-card-relations-default-flag-column {
+  text-align: center;
+}
+
+.employee-card-relations-default-flag-column .employee-card-relations-sort-button {
+  justify-content: center;
+  text-align: center;
+}
+
+.employee-card-relations-table tbody tr:hover td {
+  background: #eef1f4;
+}
+
+.content-area.dark .employee-card-relations-table tbody tr:hover td {
+  background: #5f6b79;
+}
+
+.employee-card-relations-table tbody tr.organization-card-relations-row-selected td {
+  background: #d0e9ff;
+}
+
+.employee-card-relations-table tbody tr.organization-card-relations-row-selected:hover td {
+  background: #d0e9ff;
+}
+
+.content-area.dark .employee-card-relations-table tbody tr.organization-card-relations-row-selected td {
+  background: #3663aa;
+  color: #ffffff;
+}
+
+.content-area.dark .employee-card-relations-table tbody tr.organization-card-relations-row-selected:hover td {
+  background: #3663aa;
+  color: #ffffff;
+}
+
+.employee-card-relations-table tbody tr.employee-card-relations-row-selected td {
+  background: #d0e9ff;
+}
+
+.employee-card-relations-table tbody tr.employee-card-relations-row-selected:hover td {
+  background: #d0e9ff;
+}
+
+.content-area.dark .employee-card-relations-table tbody tr.employee-card-relations-row-selected td {
+  background: #3663aa;
+  color: #ffffff;
+}
+
+.content-area.dark .employee-card-relations-table tbody tr.employee-card-relations-row-selected:hover td {
+  background: #3663aa;
+  color: #ffffff;
+}
+
+.employee-card-section {
+  border: 1px solid var(--modal-border);
+  border-radius: 8px;
+  padding: 12px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.employee-card-main-tab-content .employee-card-section {
+  flex: 0 0 auto;
+}
+
+.employee-card-main-tab-content .employee-card-section:first-child {
+  flex: 0 0 auto;
+  padding-left: 36px;
+}
+
+.employee-card-main-tab-content .employee-card-section:nth-child(2) {
+  flex: 0 0 auto;
+  margin-top: 8px;
+  padding-left: 36px;
+  min-height: 240px;
+}
+
+/* Иначе .employee-card-section:first-child ниже (тот же вес специфичности, но позже) перебивает flex:1 у блока структуры — обёртка таблицы с flex:1 схлопывается по высоте */
+.employee-card-main-tab-content.organization-card-structure-tab
+  .employee-card-section.organization-card-structure-section:first-child {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  padding-left: 14px;
+}
+
+.employee-card-section h3 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 600;
+  color: var(--main-text);
+}
+
+.employee-card-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.employee-card-section-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.employee-card-full-name {
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+  color: #1f5fbf;
+  text-align: right;
+  padding-right: 18px;
+}
+
+.employee-card-full-name-header {
+  margin-left: auto;
+  padding-right: 0;
+  max-width: min(52%, 460px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.employee-card-panel-header .employee-card-full-name-header {
+  flex: 1;
+  min-width: 0;
+  max-width: none;
+  text-align: right;
+}
+
+.content-area.dark .employee-card-full-name {
+  color: #93ccffff;
+}
+
+.employee-card-params {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+  margin-top: 24px;
+}
+
+.employee-card-params-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 15px;
+}
+
+.employee-card-param {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.employee-card-param-span-two {
+  grid-column: span 2;
+}
+
+.employee-card-param-col-three {
+  grid-column: 3;
+}
+
+.report-card-links-section {
+  margin-top: 12px;
+}
+
+.employee-card-main-tab-content.report-card-main-tab-content {
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+  gap: 10px;
+}
+
+.employee-card-main-tab-content.organization-card-main-tab-content {
+  padding-right: 4px;
+  gap: 8px;
+}
+
+.organization-card-main-tab-content .employee-card-section {
+  padding: 10px 14px 14px;
+  gap: 6px;
+}
+
+.organization-card-main-tab-content .employee-card-params {
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.organization-card-main-tab-content .employee-card-params-row {
+  gap: 10px;
+}
+
+.organization-card-multiselect {
+  min-height: 96px;
+  padding-right: 10px;
+}
+
+.organization-type-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.organization-type-option-checkbox {
+  width: 16px;
+  height: 16px;
+  border: 1px solid color-mix(in srgb, var(--main-text) 55%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--main-bg) 90%, var(--main-text) 10%);
+  box-sizing: border-box;
+  flex: 0 0 auto;
+  position: relative;
+}
+
+.organization-type-option-checkbox.checked {
+  border-color: #3c7ddd;
+  background: #3c7ddd;
+}
+
+.organization-type-option-checkbox.checked::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 4px;
+  height: 8px;
+  border-right: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: rotate(45deg);
+}
+
+.organization-type-option-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.organization-type-edit-combobox {
+  position: relative;
+}
+
+.organization-type-edit-trigger {
+  padding-right: 52px;
+}
+
+.organization-type-edit-toggle-button {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--main-text);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+  z-index: 1913;
+}
+
+.organization-type-edit-toggle-button:hover {
+  background: rgba(127, 127, 127, 0.2);
+}
+
+.organization-type-edit-toggle-button.with-clear {
+  right: 30px;
+}
+
+.organization-type-edit-clear-button {
+  right: 6px;
+}
+
+.organization-type-edit-combobox .relation-combobox-options {
+  max-height: 220px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+}
+
+.organization-type-edit-combobox .relation-combobox-options::-webkit-scrollbar {
+  width: 8px;
+}
+
+.organization-type-edit-combobox .relation-combobox-options::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--main-text) 35%, transparent);
+  border-radius: 999px;
+}
+
+.employee-card-main-tab-content.report-card-main-tab-content .employee-card-section {
+  padding: 10px 14px;
+  gap: 6px;
+}
+
+.employee-card-main-tab-content.report-card-main-tab-content .employee-card-section:first-child {
+  padding-left: 14px;
+}
+
+.employee-card-main-tab-content.report-card-main-tab-content .employee-card-section:nth-child(2) {
+  margin-top: 0;
+  padding-left: 14px;
+  min-height: 0;
+}
+
+.employee-card-main-tab-content.report-card-main-tab-content .employee-card-params {
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.employee-card-main-tab-content.report-card-main-tab-content .employee-card-params-row {
+  gap: 10px;
+}
+
+.employee-card-main-tab-content.report-card-main-tab-content .report-card-links-section {
+  margin-top: 6px;
+}
+
+.report-card-section-disabled {
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.report-card-links-disabled-note {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.3;
+  color: color-mix(in srgb, var(--main-text) 75%, transparent);
+}
+
+.report-card-links-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 15px;
+}
+
+.employee-card-main-tab-content.report-card-main-tab-content .report-card-links-grid {
+  gap: 10px;
+}
+
+.report-card-links-card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.report-card-links-card-access-groups {
+  margin-top: 8px;
+}
+
+.report-card-links-card-recipients {
+  grid-row: span 2;
+}
+
+.report-card-links-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) auto minmax(0, 1.2fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.report-card-links-actions-report-organizations {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.report-card-links-actions-report-access-groups {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.report-card-links-actions-report-recipients {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.report-card-links-actions-report-access-groups .employee-card-field-select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.report-organization-combobox {
+  min-width: 0;
+}
+
+.report-organization-combobox-menu {
+  left: 0;
+  width: 100%;
+  top: calc(100% + 4px);
+}
+
+.report-card-links-card:last-child .report-card-links-actions {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.report-card-links-card:last-child .report-card-links-actions.report-card-links-actions-report-access-groups {
+  display: flex;
+  flex-wrap: nowrap;
+}
+
+.report-card-links-table-wrapper {
+  max-height: 240px;
+  overflow: auto;
+  border: 1px solid var(--modal-border);
+  border-radius: 8px;
+}
+
+.employee-card-main-tab-content.report-card-main-tab-content .report-card-links-table-wrapper {
+  max-height: 160px;
+}
+
+.employee-card-main-tab-content.report-card-main-tab-content
+  .report-card-links-card-organizations
+  .report-card-links-table-wrapper {
+  max-height: 205px;
+}
+
+.employee-card-main-tab-content.report-card-main-tab-content
+  .report-card-links-card-recipients
+  .report-card-links-table-wrapper,
+.employee-card-main-tab-content.report-card-main-tab-content
+  .report-card-links-card-access-groups
+  .report-card-links-table-wrapper {
+  max-height: 240px;
+}
+
+.report-card-links-table {
+  width: 100%;
+}
+
+.report-card-links-empty-cell {
+  text-align: center;
+  color: color-mix(in srgb, var(--main-text) 65%, transparent);
+}
+
+.employee-card-subordination-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.employee-card-relations-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.employee-card-add-position-button {
+  width: auto;
+  min-width: 0;
+  height: 28px;
+  padding: 0 10px;
+  justify-content: center;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 16px;
+}
+
+.employee-card-positions-table-wrapper {
+  margin-top: 8px;
+  min-height: 0;
+  flex: 1;
+  overflow: auto;
+}
+
+.employee-card-positions-table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.employee-card-positions-table th,
+.employee-card-positions-table td {
+  border-bottom: 1px solid var(--modal-border);
+  padding: 8px 9px;
+  text-align: left;
+  font-size: 13px;
+  line-height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.employee-card-positions-table th {
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--modal-bg);
+}
+
+.employee-card-positions-actions-header {
+  width: 96px;
+}
+
+.employee-card-positions-actions-cell {
+  white-space: nowrap;
+  text-align: right;
+  padding-right: 0;
+}
+
+.employee-card-positions-table td.employee-card-positions-actions-cell {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.employee-card-positions-table .employee-card-relations-edit-row td {
+  position: relative;
+  z-index: 1910;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.employee-card-position-action-button {
+  width: 42px;
+  height: 28px;
+  border: 1px solid var(--modal-border);
+  border-radius: 4px;
+  background: var(--main-bg);
+  color: #1f5fbf;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  font-size: 14px;
+  line-height: 14px;
+}
+
+.employee-card-position-action-button + .employee-card-position-action-button {
+  margin-left: 0;
+}
+
+.employee-card-position-action-button:hover {
+  background: #d0e9ff;
+}
+
+.employee-card-position-action-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.employee-card-position-action-button:disabled:hover {
+  background: var(--main-bg);
+}
+
+.content-area.dark .employee-card-position-action-button {
+  color: #93ccffff;
+}
+
+.content-area.dark .employee-card-position-action-button:hover {
+  background: #5e6d7e;
+}
+
+
+/* Список справочников: колонка flex, таблица скроллится, пагинация внизу видимой области */
+.main-panel.reference-books-main-panel {
+  min-height: 0;
+  /* Отступ таблица↔пагинация задаём margin (у списка — margin-bottom у list-content-layout; у данных — margin-top у .bottom-controls-panel) */
+  gap: 0;
+}
+
+/* Явный flex-ряд как у списка сотрудников/организаций; без height:auto — иначе ряд не тянется по высоте main-panel */
+.main-panel.reference-books-main-panel > .reference-books-page.list-content-layout,
+.main-panel.reference-books-main-panel > div.list-content-layout.reference-books-page {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  align-content: stretch;
+  flex: 1;
+  min-height: 0;
+  align-self: stretch;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Данные справочника: всегда flex-row (таблица + aside), как карточка отчёта — иначе при закрытии снимается split-view и column кладёт панель под таблицу */
+/* Форма записи: карточка на 25% уже, чем прежние 50% (37.5% / 62.5%) */
+.main-panel.reference-books-main-panel
+  .reference-books-page.reference-book-data-page.list-content-layout.split-view
+  .list-content-main {
+  flex-basis: 62.5%;
+  max-width: 62.5%;
+  width: 62.5%;
+}
+
+.main-panel.reference-books-main-panel
+  .reference-books-page.reference-book-data-page.list-content-layout.split-view
+  .employee-card-panel.report-card-panel.reference-book-record-form-panel.open {
+  flex-basis: calc(37.5% - 8px);
+  max-width: calc(37.5% - 8px);
+}
+
+/* Панель записи справочника: зазор под тулбаром, поля на всю ширину блока с боковыми отступами */
+.reference-book-record-form-panel .reference-book-add-record-form {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.reference-book-record-form-panel .reference-book-toolbar-above-section {
+  margin-bottom: 14px;
+}
+
+.reference-book-record-form-panel .reference-book-add-record-setup {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.reference-book-record-form-panel .reference-book-section-main {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.reference-book-record-form-panel .employee-card-params.reference-book-add-record-params {
+  width: 100%;
+  padding-left: 12px;
+  padding-right: 12px;
+  box-sizing: border-box;
+}
+
+.reference-book-record-form-panel .employee-card-params-row.reference-book-add-record-field-row {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.reference-book-record-form-panel .reference-book-add-record-params .reference-book-field-input-clip {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.reference-book-record-form-panel .reference-book-add-record-params .relation-combobox {
+  width: 100%;
+  min-width: 0;
+}
+
+.reference-book-record-form-panel .reference-book-add-record-params .relation-combobox-trigger.employee-card-field-input {
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Запись справочника: по умолчанию «×» у правого края; если есть нативный список/календарь/spinner — он крайний справа */
+.reference-book-record-form-panel .reference-book-record-field-clear-wrap {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.reference-book-record-form-panel .reference-book-record-field-clear-wrap .column-filter-clear-button {
+  right: 6px;
+}
+
+.reference-book-record-form-panel .reference-book-record-field-clear-wrap:has(.employee-card-field-select)
+  .column-filter-clear-button,
+.reference-book-record-form-panel .reference-book-record-field-clear-wrap:has(input[type="date"])
+  .column-filter-clear-button,
+.reference-book-record-form-panel .reference-book-record-field-clear-wrap:has(input[type="datetime-local"])
+  .column-filter-clear-button,
+.reference-book-record-form-panel .reference-book-record-field-clear-wrap:has(input[inputmode="decimal"])
+  .column-filter-clear-button,
+.reference-book-record-form-panel .reference-book-record-field-clear-wrap:has(input[type="number"])
+  .column-filter-clear-button {
+  right: 30px;
+}
+
+.reference-book-record-form-panel .reference-book-record-field-clear-wrap .employee-card-field-select,
+.reference-book-record-form-panel .reference-book-record-field-clear-wrap input[type="date"],
+.reference-book-record-form-panel .reference-book-record-field-clear-wrap input[type="datetime-local"],
+.reference-book-record-form-panel .reference-book-record-field-clear-wrap input[inputmode="decimal"],
+.reference-book-record-form-panel .reference-book-record-field-clear-wrap input[type="number"] {
+  padding-right: 44px;
+}
+
+/* Комбобокс: padding задаёт .relation-combobox--has-open (+ --has-clear) глобально выше */
+
+/* Тёмная тема: плейсхолдеры темнее основного текста, чтобы не сливались со значениями */
+.content-area.dark .employee-card-main-tab-content-edit-mode .employee-card-field-input::placeholder,
+.content-area.dark .employee-card-main-tab-content-edit-mode .relation-combobox-trigger.employee-card-field-input::placeholder {
+  color: color-mix(in srgb, var(--main-text, #e8eef4) 36%, transparent);
+  opacity: 1;
+}
+
+/* Список справочников: тот же зазор таблица↔пагинация, что и у «Отображения» — только margin-top у .bottom-controls-panel;
+   иначе .report-settings-layout даёт margin-bottom: 12px и суммируется с margin-top пагинации */
+.main-panel.report-settings-main-panel.reference-books-main-panel
+  .list-content-layout.report-settings-layout:not(.reference-book-data-page) {
+  margin-bottom: 0;
+}
+
+/* Глобально ::after у list-content-main отключён (content: none); для справочников включаем линию между таблицей и карточкой */
+.main-panel.reference-books-main-panel
+  .reference-books-page.list-content-layout.split-view
+  .list-content-main::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--modal-border);
+  pointer-events: none;
+  z-index: 90;
+}
+
+/* Жёстко убираем absolute у карточки (если каскад сорван), верх совпадает с list-content-main */
+.main-panel.reference-books-main-panel .reference-books-page .employee-card-panel.report-card-panel {
+  position: relative !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+}
+
+.reference-books-page.list-content-layout {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+/* Карточка в том же ряду, что и list-content-main; тело скроллится внутри панели */
+.main-panel.reference-books-main-panel .reference-books-page.list-content-layout.split-view .employee-card-panel.report-card-panel.open {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  align-self: stretch;
+  overflow: hidden;
+}
+
+.reference-books-page .reference-books-fetch-error {
+  flex-shrink: 0;
+  margin: 0 0 8px;
+}
+
+/* Блок таблицы данных справочника — как list-content-main у списков */
+.reference-books-page .reference-books-data-main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+}
+
+.reference-books-page .table-wrapper {
+  flex: 1;
+  min-height: 0;
+  margin-top: 0;
+}
+
+.reference-books-page.reference-book-data-page .table-wrapper {
+  overflow: auto;
+}
+
+/* Как список справочников: ширина таблицы в px (colgroup + inline), не width:100% + min-width — иначе горизонтальный люфт */
+.reference-books-page.reference-book-data-page .reference-book-data-grid.employee-grid {
+  box-sizing: border-box;
+}
+
+.reference-book-record-card-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Заголовок слева, кнопка закрытия (×) — в правом углу шапки */
+.reference-book-record-form-panel .employee-card-panel-header {
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.reference-book-record-form-panel .employee-card-panel-header h2 {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Ручка смены ширины: без «белых» кнопок по умолчанию, контейнер для position:absolute */
+.reference-books-page.reference-book-data-page .reference-book-data-grid .column-header-inner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 100%;
+  box-sizing: border-box;
+}
+
+.reference-books-page.reference-book-data-page .reference-book-data-grid .column-header-inner .column-sort-button {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
+
+.reference-books-page.reference-book-data-page .reference-book-data-grid .column-resize-handle {
+  flex-shrink: 0;
+}
+
+.reference-books-page .bottom-controls-panel {
+  flex-shrink: 0;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 0;
+}
+
+.main-panel.reference-books-main-panel > .bottom-controls-panel {
+  flex-shrink: 0;
+  /* Явный зазор: первый flex-элемент с flex:1 забирает всю высоту — gap у main-panel визуально не отделяет рамку таблицы от панели */
+  margin-top: 12px;
+}
+
+/* Колонка списка: как list-content-main (рамка от report-settings); пагинация — сестринский блок под list-content-layout */
+.reference-books-left-column {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  gap: 12px;
+  overflow: visible;
+}
+
+.reference-books-list-actions-header {
+  position: relative;
+}
+
+/* Список справочников: в колонке действий одна кнопка — не 96px/две иконки как у связей */
+.reference-books-page .employee-grid th.relations-list-actions-header,
+.reference-books-page .employee-grid th.relations-list-actions-filter {
+  width: auto;
+  min-width: 0;
+  max-width: none;
+}
+
+.reference-books-page .employee-grid td.relations-list-actions-cell {
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  justify-content: center;
+  gap: 0;
+}
+
+/* Данные справочника: две иконки в колонке как в списке (center + gap), ширина колонки из colgroup */
+.reference-books-page.reference-book-data-page .reference-book-data-grid td.reference-book-data-actions-cell {
+  justify-content: center;
+  gap: 6px;
+}
+
+.report-card-links-table thead th {
+  position: relative;
+  vertical-align: bottom;
+}
+
+.report-card-links-table-data-header {
+  position: relative;
+}
+
+.reference-book-card-body {
+  overflow-x: hidden;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  /* Больше воздуха у правого края карточки (основной блок + таблица) */
+  padding-right: 32px;
+  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.reference-book-setup-tab-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.reference-book-structure-tab-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: hidden;
+}
+
+/* Вкладка «Правила»: прокрутка содержимого (карточки правил + «Добавить правило») */
+.reference-book-rules-fields-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Только блок «Параметры полей» забирает вертикальное пространство вкладки (выше двух нижних колонок). */
+.reference-book-structure-tab-pane .reference-book-structure-fields-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.reference-book-structure-tab-pane .reference-book-structure-fields-main .reference-book-fields-table-wrapper {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.reference-book-structure-bottom-row {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 12px;
+  flex: 0 0 auto;
+  width: 100%;
+  min-height: 0;
+}
+
+.reference-book-structure-extra-col {
+  box-sizing: border-box;
+  flex: 1 1 0;
+  min-width: 0;
+  width: 50%;
+  max-width: 50%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Минимальная высота области таблицы: 1.7× от базы 120px (~204px) */
+.reference-book-structure-extra-col .reference-book-simple-table-wrap {
+  flex: 1 1 auto;
+  min-height: calc(120px * 1.7);
+  overflow: auto;
+}
+
+/* Перебить глобальный .reference-book-section-fields { flex: 1 } — в нижнем ряду колонки по 50% ширины. */
+.reference-book-structure-bottom-row > .reference-book-section-fields {
+  flex: 1 1 0;
+  min-width: 0;
+  width: 50%;
+  max-width: 50%;
+}
+
+.reference-book-structure-fields-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.reference-book-structure-fields-toolbar-left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.reference-book-rules-rule-header h3 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 600;
+}
+
+.reference-book-rules-rule-params {
+  gap: 10px;
+}
+
+.reference-book-rules-rule-params > .reference-book-rules-fields-caption {
+  margin: 4px 0 2px;
+  font-size: 13px;
+  line-height: 1.35;
+  opacity: 0.88;
+}
+
+.reference-book-rules-param-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.reference-book-rules-param-row .reference-book-field-input-clip {
+  flex: 1;
+  min-width: 0;
+}
+
+.reference-book-rules-add-field-wrap {
+  margin-top: 2px;
+}
+
+.reference-book-rules-add-rule-wrap {
+  margin-top: 12px;
+}
+
+.reference-book-rules-remove-field-btn {
+  flex-shrink: 0;
+}
+
+.reference-book-rules-new-record-hint {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  max-width: 42em;
+}
+
+.reference-book-rules-rule-card {
+  border: 1px solid rgba(193, 198, 200, 0.35);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+
+.content-area.dark .reference-book-rules-rule-card {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.reference-book-rules-empty {
+  padding: 12px 0;
+}
+
+.reference-book-structure-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.reference-book-structure-toolbar-left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.reference-book-structure-extra-block {
+  margin-top: 0;
+}
+
+.reference-book-simple-table-wrap {
+  overflow-x: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.reference-book-simple-table {
+  width: 100%;
+  min-width: 280px;
+  table-layout: fixed;
+}
+
+.reference-book-simple-table-actions-col {
+  width: 52px;
+  text-align: center;
+}
+
+.reference-book-simple-table-actions-cell {
+  text-align: center;
+  width: 52px;
+}
+
+/* Высота строки как у «Синонимы»: те же классы поля, что и reference-book-field-table-input */
+.reference-book-link-table-combobox {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+/* Обёртка в ячейке: grid minmax(0) — длинный текст не раздувает колонку (flex в ячейке таблицы) */
+.reference-book-field-input-clip {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.reference-book-field-input-clip .reference-book-link-table-combobox {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+}
+
+.reference-book-field-input-clip .reference-book-link-table-combobox > input.reference-book-field-table-input {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Меню порталится в body — без .content-area var(--main-text) пустой; цвет задаётся inline, пункты наследуют */
+.reference-book-link-table-combobox-menu.relation-combobox-menu-portal .relation-combobox-option {
+  color: inherit;
+}
+
+.reference-book-link-table-combobox-menu.relation-combobox-menu-portal .relation-combobox-option:hover {
+  border-color: rgba(127, 127, 127, 0.4);
+}
+
+.reference-book-link-table-combobox-menu.relation-combobox-menu-portal .relation-combobox-empty {
+  color: inherit;
+  opacity: 0.88;
+}
+
+.reference-book-combobox-option-label {
+  display: block;
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reference-book-json-tab-pane--stretch {
+  flex: 1;
+  min-height: 0;
+}
+
+.reference-book-json-tab-pane {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* Как расстояние от кнопок до верхней границы .reference-book-section-fields на соседнем режиме (gap у .reference-book-structure-tab-pane) */
+  gap: 12px;
+}
+
+.reference-book-json-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-shrink: 0;
+  margin-bottom: 22px;
+}
+
+.reference-book-json-zoom-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.reference-book-json-preview {
+  flex: 1;
+  min-height: 160px;
+  margin: 0;
+  padding: 12px 14px;
+  overflow: auto;
+  box-sizing: border-box;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre;
+  tab-size: 2;
+  color: var(--main-text);
+  background: color-mix(in srgb, var(--main-bg) 88%, var(--modal-border) 12%);
+  border: 1px solid var(--modal-border);
+  border-radius: 8px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.reference-book-main-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  /* Одна или две кнопки — одна высота строки, без сдвига блока ниже */
+  min-height: 32px;
+  box-sizing: border-box;
+}
+
+.reference-book-toolbar-above-section {
+  display: flex;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  margin-bottom: 2px;
+  padding-top: 0;
+  padding-right: 4px;
+}
+
+/* Блок «Основные параметры» ближе к строке с «Изменить» */
+.reference-book-toolbar-above-section + .reference-book-setup-tab-pane .reference-book-section-main {
+  margin-top: -6px;
+}
+
+.reference-book-section-main {
+  flex-shrink: 0;
+}
+
+.reference-book-section-main .employee-card-params {
+  margin-top: 4px;
+}
+
+.reference-book-procedure-code-hint {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted-text);
+  margin-top: 6px;
+  max-width: min(100%, 52ch);
+}
+
+.employee-card-params-row.reference-book-main-row-2cols {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.employee-card-params-row.reference-book-main-row-3cols {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.reference-book-section-fields {
+  padding-right: 0;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Секция с padding-right: 0 — симметричный calc(100% + 36px) давал +18px за правый край */
+.reference-book-section-fields .reference-book-fields-section-header.employee-card-subordination-header {
+  flex-shrink: 0;
+  align-items: center;
+  margin-left: -18px;
+  margin-right: 0;
+  width: calc(100% + 18px);
+  padding-left: 18px;
+  padding-right: 10px;
+  box-sizing: border-box;
+}
+
+/* Слот справа от заголовка — та же высота строки в просмотре и в редактировании */
+.reference-book-fields-header-actions-slot {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  box-sizing: border-box;
+}
+
+.reference-book-fields-table-wrapper.employee-card-positions-table-wrapper {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.reference-book-fields-table.employee-card-positions-table {
+  table-layout: fixed;
+  width: max-content;
+  min-width: 100%;
+}
+
+/* sticky переопределяет базовый .employee-card-positions-table th — иначе position:relative ниже ломает закрепление */
+.reference-book-fields-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  vertical-align: bottom;
+  background: var(--modal-bg);
+  box-shadow: 0 1px 0 var(--modal-border);
+}
+
+.reference-book-fields-actions-header {
+  position: relative;
+}
+
+.reference-book-fields-table.employee-card-positions-table th,
+.reference-book-fields-table.employee-card-positions-table td {
+  /* max-width: 0 + col — ячейка не расширяется под длинный текст (иначе input рисуется поверх границы) */
+  max-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reference-book-fields-table.employee-card-positions-table thead th {
+  vertical-align: bottom;
+}
+
+.reference-book-fields-table.employee-card-positions-table tbody td {
+  vertical-align: top;
+}
+
+/* Поля в режиме «Изменить» — как вкладка «Связи сотрудника»; только доступные для ввода (не disabled) */
+.reference-book-fields-table.reference-book-fields-table--relations-style .employee-card-relations-filter-input:not(:disabled),
+.reference-book-fields-table.reference-book-fields-table--relations-style .relation-combobox-trigger:not(:disabled) {
+  border-color: #4d8de8;
+  box-shadow: 0 0 0 1px rgba(77, 141, 232, 0.35);
+  background: rgba(208, 233, 255, 0.22);
+}
+
+.content-area.dark .reference-book-fields-table.reference-book-fields-table--relations-style .employee-card-relations-filter-input:not(:disabled),
+.content-area.dark .reference-book-fields-table.reference-book-fields-table--relations-style .relation-combobox-trigger:not(:disabled) {
+  border-color: #77b2ff;
+  box-shadow: 0 0 0 1px rgba(119, 178, 255, 0.45);
+  background: rgba(93, 126, 167, 0.3);
+}
+
+.reference-book-simple-table.reference-book-simple-table--relations-style .employee-card-relations-filter-input:not(:disabled),
+.reference-book-simple-table.reference-book-simple-table--relations-style .relation-combobox-trigger:not(:disabled) {
+  border-color: #4d8de8;
+  box-shadow: 0 0 0 1px rgba(77, 141, 232, 0.35);
+  background: rgba(208, 233, 255, 0.22);
+}
+
+.content-area.dark .reference-book-simple-table.reference-book-simple-table--relations-style .employee-card-relations-filter-input:not(:disabled),
+.content-area.dark .reference-book-simple-table.reference-book-simple-table--relations-style .relation-combobox-trigger:not(:disabled) {
+  border-color: #77b2ff;
+  box-shadow: 0 0 0 1px rgba(119, 178, 255, 0.45);
+  background: rgba(93, 126, 167, 0.3);
+}
+
+.reference-book-fields-table .reference-book-field-input-clip .relation-combobox-clear-button,
+.reference-book-simple-table .reference-book-field-input-clip .relation-combobox-clear-button {
+  z-index: 4006;
+}
+
+.reference-book-fields-table .reference-book-field-input-clip .relation-combobox-open-button,
+.reference-book-simple-table .reference-book-field-input-clip .relation-combobox-open-button {
+  z-index: 4007;
+}
+
+.reference-book-field-value-inline .column-filter-input-wrapper {
+  flex: 1;
+  min-width: 0;
+}
+
+.reference-book-field-order-cell {
+  text-align: center;
+  vertical-align: top;
+}
+
+.reference-book-field-order-inner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* Ручка DnD — классы как у таблицы столбцов отчёта: .report-template-row-drag-handle */
+
+.reference-book-field-order-number {
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-text);
+  user-select: none;
+}
+
+.reference-book-fields-table tbody tr.reference-book-field-row--dragging {
+  opacity: 0.55;
+}
+
+.reference-book-fields-table tbody tr.reference-book-field-row--drag-over {
+  outline: 2px dashed var(--modal-border);
+  outline-offset: -2px;
+}
+
+/* DnD только с «ручки» в колонке Пор.№ — иначе инпуты блокируют drag с <tr> */
+
+/* Набор значений — несколько строк по вертикали, внутри каждой строки без переноса */
+.reference-book-fields-table td.reference-book-field-values-cell {
+  max-width: none;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  vertical-align: top;
+}
+
+.reference-book-field-values-cell .reference-book-field-value-inline {
+  white-space: nowrap;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.reference-book-field-values-cell .reference-book-table-cell-readonly {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* max-width не ограничивать фиксированным px — ширина колонки задаётся colgroup; иначе в режиме редактирования поле уже readonly */
+.reference-book-field-table-input {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Обрезка длинных значений — см. .reference-book-field-input-clip + input в комбобоксе */
+
+.reference-book-table-cell-readonly {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.reference-book-field-values-cell {
+  min-width: 140px;
+  max-width: 220px;
+}
+
+.reference-book-field-values-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.reference-book-field-value-inline {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.reference-book-field-link-show-cell,
+.reference-book-field-link-list-cell,
+.reference-book-field-link-tooltip-cell,
+.reference-book-field-link-filtr-cell {
+  min-width: 120px;
+}
+
+.reference-book-field-link-filtr-textarea {
+  resize: vertical;
+  min-height: 44px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.reference-book-add-value-inline {
+  align-self: flex-start;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.reference-book-fields-empty-cell {
+  text-align: center;
+  color: var(--muted-text);
+  padding: 16px;
+}
+
+.reference-book-fields-actions-col,
+.reference-book-fields-actions-cell {
+  width: 40px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.reference-book-fields-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.reference-book-field-block {
+  border: 1px solid var(--modal-border);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+  background: var(--main-bg);
+}
+
+.reference-book-field-block-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.reference-book-field-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.reference-book-field-value-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.reference-book-field-value-row .employee-card-field-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.reference-book-add-value-btn {
+  margin-top: 4px;
+}
+
+.reference-book-empty-fields {
+  opacity: 0.75;
+  margin: 0;
+}
+
+.employee-card-add-position-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.employee-card-add-position-button:disabled:hover {
+  background: var(--main-bg);
+}
+
+.employee-card-positions-table tbody tr:hover td {
+  background: #eef1f4;
+}
+
+.content-area.dark .employee-card-positions-table tbody tr:hover td {
+  background: #5f6b79;
+}
+
+.employee-card-field-label {
+  font-size: 12px;
+  line-height: 16px;
+  opacity: 0.75;
+}
+
+.employee-card-field-value {
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 600;
+  color: var(--main-text);
+  overflow-wrap: anywhere;
+}
+
+.employee-card-field-value-block {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--modal-border);
+  border-radius: 4px;
+  background: var(--main-bg);
+  padding: 8px 10px;
+  min-height: 34px;
+  font-size: 14px;
+  line-height: 18px;
+  font-weight: 400;
+}
+
+.employee-card-field-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--modal-border);
+  border-radius: 4px;
+  background: var(--main-bg);
+  color: var(--main-text);
+  padding: 8px 10px;
+  min-height: 34px;
+  font-size: 14px;
+  line-height: 18px;
+  padding-right: 30px;
+}
+
+.employee-card-main-tab-content-edit-mode .employee-card-field-input {
+  border-color: #4d8de8;
+  box-shadow: 0 0 0 1px rgba(77, 141, 232, 0.35);
+  background: rgba(208, 233, 255, 0.22);
+}
+
+.content-area.dark .employee-card-main-tab-content-edit-mode .employee-card-field-input {
+  border-color: #77b2ff;
+  box-shadow: 0 0 0 1px rgba(119, 178, 255, 0.45);
+  background: rgba(93, 126, 167, 0.3);
+}
+
+/* Карточка справочника: суффикс URL только для чтения — без подсветки «редактируемого» поля */
+.employee-card-main-tab-content-edit-mode .reference-book-reference-url-readonly.employee-card-field-input {
+  border-color: var(--modal-border);
+  box-shadow: none;
+  background: var(--main-bg);
+}
+
+.content-area.dark .employee-card-main-tab-content-edit-mode .reference-book-reference-url-readonly.employee-card-field-input {
+  border-color: var(--modal-border);
+  box-shadow: none;
+  background: var(--main-bg);
+}
+
+.employee-card-main-tab-content-edit-mode .reference-book-param-reference-url .employee-card-field-label {
+  color: var(--main-text);
+}
+
+.employee-card-main-tab-content-edit-mode .employee-card-field-label {
+  color: #1f5fbf;
+  opacity: 1;
+}
+
+.content-area.dark .employee-card-main-tab-content-edit-mode .employee-card-field-label {
+  color: #93ccffff;
+}
+
+.employee-card-field-input-wrapper {
+  position: relative;
+}
+
+.employee-card-field-input-clear-button {
+  position: absolute;
+  top: 50%;
+  right: 7px;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--main-text);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 16px;
+  padding: 0;
+  opacity: 0.7;
+}
+
+.employee-card-field-input-clear-button:hover {
+  opacity: 1;
+}
+
+.report-output-file-template-help {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.report-output-file-template-help-text {
+  font-size: 12px;
+  line-height: 16px;
+  color: color-mix(in srgb, var(--main-text) 78%, transparent);
+}
+
+.report-output-file-template-help-text code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
+}
+
+.employee-card-section-disabled {
+  opacity: 0.65;
+}
+
+.table-wrapper:focus {
+  outline: none;
+}
+
+.employee-grid {
+  width: max-content;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.employee-grid th,
+.employee-grid td {
+  border-bottom: 1px solid var(--modal-border);
+  padding: 10px 8px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 14px;
+  line-height: 18px;
+}
+
+.employee-grid td.cell-center {
+  text-align: center;
+}
+
+/* In relations list page editor row, allow combobox menus above cells */
+.employee-grid .employee-card-relations-edit-row td {
+  position: relative;
+  overflow: visible;
+  text-overflow: clip;
+  z-index: 2;
+}
+
+.employee-grid .employee-card-relations-edit-row td:focus-within {
+  z-index: 3990;
+}
+
+.employee-grid .employee-card-relations-edit-row .relation-combobox {
+  z-index: 1;
+}
+
+.employee-grid .employee-card-relations-edit-row .relation-combobox.open {
+  z-index: 4000;
+}
+
+.employee-grid .employee-card-relations-edit-row .relation-combobox-menu {
+  z-index: 4010;
+}
+
+.employee-grid th.relations-default-flag-column .column-sort-button {
+  justify-content: center;
+  text-align: center;
+}
+
+.employee-grid .filter-row th.relations-default-flag-column .column-filter-input {
+  text-align: center;
+  text-align-last: center;
+}
+
+.actions-header-cell {
+  min-width: 56px;
+}
+
+.actions-filter-cell {
+  min-width: 56px;
+}
+
+.actions-cell {
+  width: 56px;
+}
+
+.row-action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.row-action-button {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--modal-border);
+  border-radius: 4px;
+  background: var(--main-bg);
+  color: var(--main-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.row-action-button svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+.row-action-button:hover {
+  background: #e7eef5;
+}
+
+.content-area.dark .row-action-button:hover {
+  background: #4a5768;
+}
+
+
+.employee-grid tbody tr.selected-row td {
+  background: #d0e9ff;
+}
+
+.employee-grid tbody tr.selected-row:hover td {
+  background: #d0e9ff;
+}
+
+
+.employee-grid tbody tr:hover td {
+  background: #eef1f4;
+}
+
+.employee-grid tbody tr:hover td.relations-list-actions-cell {
+  background: #eef1f4;
+}
+
+.employee-grid tbody tr:hover {
+  cursor: pointer;
+}
+
+.content-area.dark .employee-grid tbody tr.selected-row td {
+  background: #3663aaff;
+  color: #ffffff;
+}
+
+.content-area.dark .employee-grid tbody tr.selected-row:hover td {
+  background: #3663aaff;
+  color: #ffffff;
+}
+
+
+.content-area.dark .employee-grid tbody tr:hover td {
+  background: #5f6b79;
+  color: #ffffff;
+}
+
+.content-area.dark .employee-grid tbody tr:hover td.relations-list-actions-cell {
+  background: #5f6b79;
+}
+
+.employee-grid tbody tr:focus,
+.employee-grid tbody tr:focus-visible {
+  outline: none;
+}
+
+.sticky-cell {
+  position: sticky;
+  background: var(--modal-bg);
+}
+
+.sticky-left {
+  box-shadow: 1px 0 0 var(--modal-border);
+}
+
+.sticky-right {
+  box-shadow: -1px 0 0 var(--modal-border);
+}
+
+.employee-grid th {
+  color: var(--main-text);
+  font-weight: 700;
+  padding: 0;
+  position: relative;
+}
+
+.employee-grid thead {
+  position: sticky;
+  top: 0;
+  z-index: 42;
+  background: var(--modal-bg);
+}
+
+.employee-grid thead tr:first-child th {
+  position: sticky;
+  top: 0;
+  z-index: 44;
+  height: 38px;
+  min-height: 38px;
+  background: var(--modal-bg);
+  box-shadow: inset 0 -1px 0 var(--modal-border);
+}
+
+.filter-row th {
+  padding: 8px;
+  position: sticky;
+  top: 38px;
+  z-index: 43;
+  background: var(--modal-bg);
+  overflow: visible;
+  box-shadow: inset 0 -1px 0 var(--modal-border);
+}
+
+.filter-row th::before {
+  content: "";
+  position: absolute;
+  top: -2px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--modal-bg);
+  pointer-events: none;
+}
+
+.column-filter-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--modal-border);
+  border-radius: 4px;
+  background: var(--main-bg);
+  color: var(--main-text);
+  padding: 6px 8px;
+  font-size: 13px;
+  line-height: 16px;
+}
+
+.column-filter-input-wrapper {
+  position: relative;
+}
+
+.column-filter-input-wrapper .column-filter-input {
+  padding-right: 28px;
+}
+
+.column-filter-input-wrapper .employee-card-relations-filter-input {
+  padding-right: 28px;
+}
+
+.column-filter-clear-button {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(127, 127, 127, 0.18);
+  color: var(--main-text);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+}
+
+.column-filter-clear-button:hover {
+  background: rgba(127, 127, 127, 0.28);
+}
+
+.organization-type-filter-combobox {
+  width: 100%;
+}
+
+.organization-type-filter-combobox.open {
+  z-index: 10050;
+}
+
+.organization-type-filter-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0;
+  padding-right: 56px;
+}
+
+.organization-type-filter-trigger-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.organization-type-filter-menu {
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  min-width: 220px;
+}
+
+.organization-type-filter-close-button {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(127, 127, 127, 0.18);
+  color: var(--main-text);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.organization-type-filter-close-button:hover {
+  background: rgba(127, 127, 127, 0.28);
+}
+
+.organization-type-filter-close-button.with-clear {
+  right: 30px;
+}
+
+.organization-type-filter-clear-button {
+  right: 6px;
+}
+
+.organization-type-filter-options {
+  max-height: 240px;
+}
+
+.organization-type-filter-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.organization-type-filter-option:hover {
+  background: rgba(127, 127, 127, 0.12);
+}
+
+.organization-type-filter-option input {
+  margin: 0;
+}
+
+.column-sort-button {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 8px;
+  cursor: pointer;
+}
+
+.column-sort-button.active {
+  color: #243bb5;
+}
+
+.content-area.dark .column-sort-button.active {
+  color: #f0d05dff;
+}
+
+.sort-icon {
+  font-size: 12px;
+  line-height: 12px;
+}
+
+.sort-icon-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sort-order-index {
+  font-size: 10px;
+  line-height: 1;
+  font-weight: 700;
+  min-width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.column-resize-handle {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 3;
+}
+
+.column-settings-panel {
+  position: fixed;
+  right: 24px;
+  width: 390px;
+  background: var(--modal-bg);
+  border: 1px solid var(--modal-border);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  z-index: 160;
+}
+
+.column-settings-header,
+.column-settings-list,
+.column-settings-footer {
+  background: var(--modal-bg);
+}
+
+.column-settings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--modal-border);
+}
+
+.column-settings-header h3 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 28px;
+  font-weight: 700;
+  color: var(--main-text);
+}
+
+.close-settings-button {
+  border: none;
+  background: transparent;
+  color: var(--main-text);
+  font-size: 18px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  line-height: 0;
+}
+
+.column-settings-list {
+  flex: 1;
+  overflow: auto;
+  padding: 10px 8px;
+}
+
+.column-settings-search {
+  padding: 4px 8px 12px;
+}
+
+.column-settings-search input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--modal-border);
+  border-radius: 4px;
+  background: var(--main-bg);
+  color: var(--main-text);
+  padding: 6px 8px;
+  font-size: 13px;
+  line-height: 16px;
+}
+
+.column-settings-search input::placeholder {
+  color: color-mix(in srgb, var(--main-text) 55%, transparent);
+  opacity: 1;
+}
+
+.column-settings-panel--dark .column-settings-search input::placeholder {
+  color: color-mix(in srgb, var(--main-text) 65%, transparent);
+}
+
+.column-settings-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 6px;
+}
+
+.column-settings-item:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.content-area.dark .column-settings-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.column-settings-panel--dark .column-settings-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.drag-handle {
+  cursor: move;
+  color: #66747f;
+  user-select: none;
+}
+
+.column-settings-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-icon-button {
+  border: 1px solid #c5ccd3;
+  background: #f3f5f7;
+  color: #374151;
+  cursor: pointer;
+  font-size: 16px;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.settings-icon-button.active {
+  background: #1f5fbf;
+  border-color: #1f5fbf;
+  color: #ffffff;
+}
+
+.column-settings-footer {
+  border-top: 1px solid var(--modal-border);
+  padding: 12px 16px;
+  display: flex;
+  gap: 8px;
+}
+
+.settings-footer-button {
+  border: none;
+  border-radius: 6px;
+  padding: 8px 12px;
+  cursor: pointer;
+  background: #d0e9ff;
+  color: #1f5fbf;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.settings-footer-button.primary {
+  background: #1f5fbf;
+  color: #fff;
+}
+
+.grid-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.bottom-controls-panel {
+  background: var(--modal-bg);
+  border: 1px solid var(--modal-border);
+  border-radius: 8px;
+  padding: 12px 16px;
+  width: 100%;
+  box-sizing: border-box;
+  flex: none;
+}
+
+.pagination-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pager-ellipsis {
+  color: var(--main-text);
+  padding: 0 4px;
+}
+
+.pager-button {
+  border: none;
+  border-radius: 999px;
+  background: #3663aaff;
+  color: #f2f3f4ff;
+  min-width: 32px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pager-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.pager-button.active {
+  background: #243bb5;
+  color: #f2f3f4ff;
+}
+
+.content-area.dark .pager-button {
+  background: #ffffffff;
+  color: #000000;
+}
+
+.content-area.dark .pager-button.active {
+  background: #243bb5;
+  color: #f2f3f4ff;
+}
+
+.grid-controls-right {
+  margin-left: auto;
+}
+
+.page-jump-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  margin-left: 24px;
+}
+
+.selected-count-label {
+  font-size: 14px;
+  line-height: 18px;
+  color: var(--main-text);
+  margin-left: 24px;
+}
+
+.page-jump-control select {
+  border: 1px solid var(--modal-border);
+  border-radius: 4px;
+  background: var(--main-bg);
+  color: var(--main-text);
+  padding: 4px 8px;
+}
+
+.page-jump-control input {
+  width: 88px;
+  border: 1px solid var(--modal-border);
+  border-radius: 4px;
+  background: var(--main-bg);
+  color: var(--main-text);
+  padding: 4px 8px;
+  box-sizing: border-box;
+}
+
+.page-jump-button {
+  border: 1px solid var(--modal-border);
+  border-radius: 4px;
+  background: var(--main-bg);
+  color: var(--main-text);
+  padding: 4px 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.page-jump-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.page-jump-control select option {
+  background: var(--main-bg);
+  color: var(--main-text);
+}
+
+.content-area.dark .page-jump-control select {
+  background: var(--main-bg);
+  color: var(--main-text);
+}
+
+.content-area.dark .page-jump-control select option {
+  background: var(--main-bg);
+  color: var(--main-text);
+}
+
+.page-size-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.page-size-control select {
+  border: 1px solid var(--modal-border);
+  border-radius: 4px;
+  background: var(--main-bg);
+  color: var(--main-text);
+  padding: 4px 8px;
+}
+
+.upload-button {
+  border: none;
+  border-radius: 4px;
+  background: #3663aaff;
+  color: #f2f3f4ff;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 18px;
+  font-weight: 500;
+}
+
+.upload-button:hover {
+  background: #3c73caff;
+}
+
+.upload-button:has(input:disabled) {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.result-message {
+  max-width: 520px;
+  text-align: center;
+  margin: 0;
+}
+
+.stats {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stats p {
+  margin: 0;
+}
+
+.report-sql-execution-loader {
+  width: 38px;
+  height: 38px;
+  border: 3px solid rgba(54, 99, 170, 0.25);
+  border-top-color: #3663aaff;
+  border-radius: 50%;
+  animation: report-sql-loader-spin 0.8s linear infinite;
+  align-self: center;
+}
+
+@keyframes report-sql-loader-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 2000;
+}
+
+/* Портал для модалок (sibling #root) — не перехватывает клики под пустой областью.
+   Переменные модалки: портал вне .content-area, иначе var(--modal-bg) не задан — фон прозрачный */
+#rb-modal-root {
+  position: fixed;
+  inset: 0;
+  width: 0;
+  height: 0;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 2147483000;
+  --modal-bg: #ffffff;
+  --modal-text: #001729;
+  --modal-border: #c1c6c84d;
+  --main-bg: #edeeef;
+  --main-text: #001729;
+}
+
+#rb-modal-root > * {
+  pointer-events: auto;
+}
+
+.modal-overlay.modal-theme-dark {
+  --modal-bg: #475363;
+  --modal-text: #f2f3f4;
+  --modal-border: #788696ff;
+  --main-bg: #3c4854;
+  --main-text: #f2f3f4;
+}
+
+.modal {
+  width: min(560px, 100%);
+  background: var(--modal-bg, #ffffff);
+  color: var(--modal-text, #001729);
+  border: 1px solid var(--modal-border, rgba(193, 198, 200, 0.35));
+  border-radius: 8px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modal h2 {
+  color: inherit;
+}
+
+/* Форма «Новая запись» — как «Основные параметры» карточки справочника */
+.reference-book-add-record-modal .reference-book-add-record-params {
+  margin-top: 4px;
+  gap: 12px;
+}
+
+.reference-book-add-record-modal .employee-card-params-row.reference-book-add-record-field-row {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.reference-book-add-record-modal .reference-book-add-record-setup {
+  padding: 0;
+}
+
+.reference-book-add-record-hint {
+  font-weight: 400;
+  opacity: 0.85;
+  font-size: 12px;
+}
+
+.modal-close-button {
+  align-self: flex-end;
+  border: none;
+  border-radius: 4px;
+  background: #3663aaff;
+  color: #f2f3f4;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.modal-close-button:hover {
+  background: #3c73caff;
+}
+
+.modal-close-button.secondary {
+  background: #b3b9bf;
+  color: #001729;
+}
+
+.modal-close-button.secondary:hover {
+  background: #8f9ca6;
+  color: #001729;
+}
+
+.log-link {
+  color: var(--link-color);
+  text-decoration: none;
+}
+
+.log-link:hover {
+  text-decoration: underline;
+}
+
+.employee-name-link {
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+.confirm-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* Выше панели «Администрирование» (2147483601): тултипы в portal на document.body */
+.custom-cell-tooltip {
+  position: fixed;
+  z-index: 2147483620;
+  pointer-events: none;
+  max-width: 420px;
+  background: rgba(21, 26, 33, 0.96);
+  color: #ffffff;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 16px;
+  white-space: pre-line;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+}
+
+.custom-button-tooltip {
+  position: fixed;
+  z-index: 2147483621;
+  pointer-events: none;
+  max-width: 320px;
+  background: rgba(21, 26, 33, 0.96);
+  color: #ffffff;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 16px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+  white-space: nowrap;
+}
+
+.relations-error-toast {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2206;
+  background: #c61e1e;
+  color: #ffffff;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(460px, calc(100vw - 32px));
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
+  opacity: 1;
+  transform: translateX(0);
+  transition:
+    opacity 0.35s ease,
+    transform 0.35s ease;
+  animation: relations-toast-enter 0.3s ease-out;
+}
+
+.relations-error-toast-error {
+  background: #c61e1e;
+}
+
+.relations-error-toast-success {
+  background: #15803d;
+}
+
+.relations-error-toast.closing {
+  opacity: 0;
+  transform: translateX(28px);
+}
+
+@keyframes relations-toast-enter {
+  from {
+    opacity: 0;
+    transform: translate(20px, 10px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, 0);
+  }
+}
+
+.relations-error-toast-close {
+  border: none;
+  background: transparent;
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+}
+
+/* Полноэкранный индикатор при выгрузке Excel (крутилка) */
+.excel-export-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
+
+.excel-export-overlay-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 23, 41, 0.35);
+}
+
+.excel-export-overlay-panel {
+  position: relative;
+  min-width: 260px;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 20px 24px;
+  border-radius: 10px;
+  border: 1px solid var(--modal-border, #c1c6c84d);
+  background: var(--modal-bg, #edeeef);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.excel-export-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid color-mix(in srgb, var(--main-text, #001729) 18%, transparent);
+  border-top-color: var(--main-text, #001729);
+  border-radius: 50%;
+  animation: excel-export-spin 0.85s linear infinite;
+}
+
+.excel-export-overlay-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.35;
+  color: var(--main-text, #001729);
+  text-align: center;
+}
+
+@keyframes excel-export-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

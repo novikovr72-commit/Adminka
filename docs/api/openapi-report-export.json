@@ -1,0 +1,285 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "My Module Report Export API",
+    "version": "1.0.0",
+    "description": "Прокси-эндпоинт модуля для формирования Excel-отчета через adminka."
+  },
+  "servers": [
+    {
+      "url": "https://my-module.example.com"
+    }
+  ],
+  "paths": {
+    "/api/reports/export": {
+      "post": {
+        "summary": "Сформировать Excel-отчет",
+        "description": "Формирует отчет через adminka `/api/admin/report-template/execute`. Для отчетов с method=HAND параметр roleNames обязателен.",
+        "tags": [
+          "Reports"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportExportRequest"
+              },
+              "examples": {
+                "fullExport": {
+                  "summary": "Полный экспорт",
+                  "value": {
+                    "reportTemplateId": "406a345a-d3e3-4fff-a3c4-88529fddee3d",
+                    "reportId": "406a345a-d3e3-4fff-a3c4-88529fddee3d",
+                    "startReport": "2026-03-01",
+                    "endReport": "2026-03-31",
+                    "claimOrganizationId": "11111111-2222-3333-4444-555555555555",
+                    "roleNames": [
+                      "nl-gsg-claim-master-all",
+                      "nl-gsg-claim-view"
+                    ],
+                    "preview": false
+                  }
+                },
+                "previewExport": {
+                  "summary": "Preview 50 строк",
+                  "value": {
+                    "reportTemplateId": "406a345a-d3e3-4fff-a3c4-88529fddee3d",
+                    "reportId": "406a345a-d3e3-4fff-a3c4-88529fddee3d",
+                    "roleNames": [
+                      "nl-gsg-claim-master-all"
+                    ],
+                    "preview": true,
+                    "limit": 50
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Файл Excel",
+            "headers": {
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Имя файла отчета"
+              },
+              "X-Execution-Ms": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Общее время, мс"
+              },
+              "X-Execution-Time": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Общее время в формате mm:ss:SSS"
+              },
+              "X-Selected-Rows": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Кол-во строк отчета"
+              },
+              "X-Query-Execution-Ms": {
+                "schema": {
+                  "type": "number"
+                },
+                "description": "Время выполнения SQL"
+              },
+              "X-Template-Fill-Ms": {
+                "schema": {
+                  "type": "number"
+                },
+                "description": "Время заполнения шаблона"
+              },
+              "X-Query-Execution-Ns": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Время выполнения SQL, нс"
+              },
+              "X-Template-Fill-Ns": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Время заполнения шаблона, нс"
+              },
+              "X-Preview-Limit": {
+                "schema": {
+                  "type": "integer"
+                },
+                "description": "Лимит preview (если preview=true)"
+              }
+            },
+            "content": {
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Ошибка в параметрах или SQL",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                },
+                "examples": {
+                  "badRequest": {
+                    "value": {
+                      "ok": false,
+                      "error": "Для отчетов с method=HAND параметр roleNames обязателен"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Неавторизован",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Доступ запрещен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Внутренняя ошибка",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "Java",
+            "label": "Spring WebClient",
+            "source": "var payload = Map.of(\"reportTemplateId\", reportTemplateId, \"reportId\", reportTemplateId, \"roleNames\", roleNames, \"preview\", false);\\nvar response = webClient.post()\\n  .uri(\"/api/reports/export\")\\n  .header(\"Authorization\", \"Bearer \" + token)\\n  .contentType(MediaType.APPLICATION_JSON)\\n  .bodyValue(payload)\\n  .retrieve()\\n  .toEntity(byte[].class)\\n  .block();"
+          },
+          {
+            "lang": "JavaScript",
+            "label": "Node fetch",
+            "source": "const resp = await fetch('https://my-module.example.com/api/reports/export', {\\n  method: 'POST',\\n  headers: {\\n    'Content-Type': 'application/json',\\n    'Authorization': `Bearer ${token}`\\n  },\\n  body: JSON.stringify({\\n    reportTemplateId,\\n    reportId: reportTemplateId,\\n    startReport,\\n    endReport,\\n    claimOrganizationId,\\n    roleNames,\\n    preview: false\\n  })\\n});\\nconst bytes = await resp.arrayBuffer();"
+          },
+          {
+            "lang": "C#",
+            "label": "HttpClient",
+            "source": "var payload = new {\\n  reportTemplateId,\\n  reportId = reportTemplateId,\\n  startReport,\\n  endReport,\\n  claimOrganizationId,\\n  roleNames,\\n  preview = false\\n};\\nvar req = new HttpRequestMessage(HttpMethod.Post, \\\"/api/reports/export\\\");\\nreq.Headers.Authorization = new AuthenticationHeaderValue(\\\"Bearer\\\", token);\\nreq.Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, \\\"application/json\\\");\\nvar resp = await httpClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead);"
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "ReportExportRequest": {
+        "type": "object",
+        "required": [
+          "reportTemplateId",
+          "reportId"
+        ],
+        "properties": {
+          "reportTemplateId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID выбранного отчета из report_templates"
+          },
+          "reportId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID отчета (обычно равен reportTemplateId)"
+          },
+          "startReport": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "Дата начала периода (если отсутствует вместе с endReport -> весь период)"
+          },
+          "endReport": {
+            "type": "string",
+            "format": "date",
+            "nullable": true,
+            "description": "Дата окончания периода"
+          },
+          "claimOrganizationId": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true,
+            "description": "Организация для фильтра отчета"
+          },
+          "roleNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Роли пользователя из JWT (Keycloak). Для HAND-отчетов должны быть переданы."
+          },
+          "preview": {
+            "type": "boolean",
+            "default": false,
+            "description": "true = preview, false = полный экспорт"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 500,
+            "nullable": true,
+            "description": "Лимит строк для preview"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "required": [
+          "ok",
+          "error"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "example": false
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

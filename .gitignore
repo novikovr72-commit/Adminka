@@ -1,0 +1,12 @@
+node_modules/
+frontend/node_modules/
+frontend/dist/
+backend/target/
+backend/logs/
+.venv/
+.DS_Store
+*.xlsx
+.env
+backend/.env
+frontend/.env
+.run/
