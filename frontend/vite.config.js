@@ -9,7 +9,7 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      "@kazakhmys-docs": path.resolve(__dirname, "../cusror/docs/Казахстан")
+      "@kazakhmys-docs": path.resolve(__dirname, "../cursor/docs/Казахстан")
     }
   },
   server: {

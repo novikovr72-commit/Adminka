@@ -342,7 +342,7 @@ export function MiningExecutiveDashboard() {
         </div>
         <div className="mining-meta">
           Обновлено: {updatedRu}
-          <div>Источник: образец данных JSON (папка cusror/docs/Казахстан)</div>
+          <div>Источник: образец данных JSON (папка cursor/docs/Казахстан)</div>
         </div>
       </header>
 
